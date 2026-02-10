@@ -266,6 +266,26 @@ def init():
     init_rules()
 
 
+@rules.command(name="stats")
+@click.option("--file", "rules_file", default=None, help="Path to rules YAML.")
+@click.option("--limit", default=200, help="Max messages to scan.")
+def rules_stats(rules_file, limit):
+    """Show rule coverage stats and unmatched senders."""
+    client = get_authenticated_client()
+    from .rule_analytics import rule_stats
+    rule_stats(client, rules_file, limit)
+
+
+@rules.command()
+@click.option("--file", "rules_file", default=None, help="Path to rules YAML.")
+@click.option("--limit", default=200, help="Max messages to scan.")
+def suggest(rules_file, limit):
+    """Suggest new rules based on unmatched messages."""
+    client = get_authenticated_client()
+    from .rule_analytics import suggest_rules
+    suggest_rules(client, rules_file, limit)
+
+
 # ── Filters (Server-Side Sieve) ─────────────────────────────────────────────
 
 @cli.group()
@@ -377,6 +397,65 @@ def profile(refresh, samples):
     else:
         from .style_profile import show_profile
         show_profile()
+
+
+# ── Templates ────────────────────────────────────────────────────────────────
+
+@cli.group()
+def templates():
+    """Reusable email reply templates."""
+    pass
+
+
+@templates.command(name="list")
+def templates_list():
+    """List all saved templates."""
+    from .templates import list_templates
+    list_templates()
+
+
+@templates.command(name="create")
+@click.argument("name")
+@click.option("--body", "-b", default=None, help="Template body (opens editor if omitted).")
+def templates_create(name, body):
+    """Create a new reply template."""
+    from .templates import create_template
+    create_template(name, body)
+
+
+@templates.command()
+@click.argument("name")
+def show(name):
+    """Show a template's full content."""
+    from .templates import show_template
+    show_template(name)
+
+
+@templates.command()
+@click.argument("name")
+def edit(name):
+    """Edit an existing template."""
+    from .templates import edit_template
+    edit_template(name)
+
+
+@templates.command(name="delete")
+@click.argument("name")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation.")
+def templates_delete(name, yes):
+    """Delete a template."""
+    from .templates import delete_template
+    delete_template(name, skip_confirm=yes)
+
+
+@templates.command()
+@click.argument("template_name")
+@click.argument("message_id")
+def use(template_name, message_id):
+    """Apply a template as a reply to a message."""
+    client = get_authenticated_client()
+    from .templates import use_template
+    use_template(client, template_name, message_id)
 
 
 # ── Watch Mode ───────────────────────────────────────────────────────────────

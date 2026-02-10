@@ -29,6 +29,10 @@ MENU = """\
   [13] Preview Sieve filters
   [14] AI draft reply
   [15] Find unsubscribe links
+  [16] Rule coverage stats
+  [17] Suggest new rules
+  [18] List templates
+  [19] Use template reply
 
   [q] Quit
 """
@@ -149,6 +153,30 @@ def _handle_choice(client: ProtonMailExt, choice: str) -> None:
     elif choice == "15":
         from .cleanup import find_unsubscribe_links
         find_unsubscribe_links(client)
+
+    elif choice == "16":
+        from .rule_analytics import rule_stats
+        rule_stats(client)
+
+    elif choice == "17":
+        from .rule_analytics import suggest_rules
+        suggest_rules(client)
+
+    elif choice == "18":
+        from .templates import list_templates
+        list_templates()
+
+    elif choice == "19":
+        from .templates import use_template
+        tpl_name = console.input("Template name: ").strip()
+        if not tpl_name:
+            print_warning("Template name required.")
+            return
+        msg_id = console.input("Message ID to reply to: ").strip()
+        if not msg_id:
+            print_warning("Message ID required.")
+            return
+        use_template(client, tpl_name, msg_id)
 
     else:
         print_warning(f"Unknown option: {choice}")

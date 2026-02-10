@@ -16,6 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ai = ["anthropic>=0.40.0"]
+test = ["pytest>=7.0", "pytest-mock>=3.10"]
 
 [project.scripts]
 pmo = "protonmail_organizer.cli:cli"
