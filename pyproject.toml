@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "protonmail-organizer"
+version = "0.1.0"
+description = "CLI tool to organize your ProtonMail inbox"
+requires-python = ">=3.9"
+dependencies = [
+    "protonmail-api-client==2.4.3",
+    "click>=8.1",
+    "rich>=13.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+ai = ["anthropic>=0.40.0"]
+
+[project.scripts]
+pmo = "protonmail_organizer.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]

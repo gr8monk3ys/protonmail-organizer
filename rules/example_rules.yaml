@@ -1,0 +1,58 @@
+# ProtonMail Organizer - Example Rules
+#
+# Copy this file to ~/.config/protonmail-organizer/rules.yaml
+# or run: pmo rules init
+#
+# Each rule has:
+#   - name: descriptive name
+#   - conditions: all must match (AND logic)
+#   - actions: what to do with matched messages
+#
+# Available conditions:
+#   sender_is: exact email match
+#   sender_contains: substring match in sender address
+#   sender_domain: match sender's domain
+#   subject_contains: substring match in subject
+#   has_attachment: true/false
+#   older_than_days: messages older than N days
+#   unread: true/false
+#
+# Available actions:
+#   move_to: move to folder/label name
+#   add_label: apply a label
+#   remove_label: remove a label
+#   mark_read: true
+#   delete: true
+#   archive: true
+#   star: true
+#
+# Free plan limits: 3 labels + 3 folders
+
+rules:
+  - name: "Archive old promotions"
+    conditions:
+      sender_contains: "promo"
+      older_than_days: 30
+    actions:
+      archive: true
+
+  - name: "Label GitHub notifications"
+    conditions:
+      sender_domain: "github.com"
+    actions:
+      add_label: "GitHub"
+      mark_read: true
+
+  - name: "Star important contacts"
+    conditions:
+      sender_is: "boss@company.com"
+    actions:
+      star: true
+
+  - name: "Delete old newsletters"
+    conditions:
+      sender_contains: "newsletter"
+      older_than_days: 60
+      unread: true
+    actions:
+      delete: true
