@@ -8,11 +8,14 @@
 #   - conditions: all must match (AND logic)
 #   - actions: what to do with matched messages
 #
-# Available conditions:
+# Available conditions (any text condition also accepts a list of values,
+# matching if ANY value matches — e.g. sender_domain: ["github.com", "gitlab.com"]):
 #   sender_is: exact email match
 #   sender_contains: substring match in sender address
 #   sender_domain: match sender's domain
 #   subject_contains: substring match in subject
+#   sender_matches: case-insensitive regex against the sender address
+#   subject_matches: case-insensitive regex against the subject
 #   has_attachment: true/false
 #   older_than_days: messages older than N days
 #   unread: true/false

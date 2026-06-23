@@ -14,13 +14,12 @@ import re
 from collections import Counter
 from typing import Optional
 
-from rich.panel import Panel
 from rich.table import Table
 
 from .client_ext import ProtonMailExt
 from .config import STYLE_PROFILE_FILE, ensure_config_dir
 from .constants import ALL_SENT
-from .display import console, print_error, print_info, print_success, print_warning
+from .display import console, print_info, print_success, print_warning
 
 
 def build_style_profile(client: ProtonMailExt, sample_count: int = 50) -> dict:
@@ -75,7 +74,7 @@ def build_style_profile(client: ProtonMailExt, sample_count: int = 50) -> dict:
         word_counts.append(len(words))
 
         # Detect greetings (first line patterns)
-        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
         if lines:
             first_line = lines[0]
             greeting = _extract_greeting(first_line)
@@ -89,7 +88,11 @@ def build_style_profile(client: ProtonMailExt, sample_count: int = 50) -> dict:
                 signoffs[signoff] += 1
 
         # Count emojis
-        emoji_count += len(re.findall(r"[\U0001f600-\U0001f650\U0001f680-\U0001f6ff\u2600-\u26ff\u2700-\u27bf]", text))
+        emoji_count += len(
+            re.findall(
+                r"[\U0001f600-\U0001f650\U0001f680-\U0001f6ff\u2600-\u26ff\u2700-\u27bf]", text
+            )
+        )
 
         # Count exclamation marks
         exclamation_count += text.count("!")
@@ -134,7 +137,10 @@ def build_style_profile(client: ProtonMailExt, sample_count: int = 50) -> dict:
     os.chmod(STYLE_PROFILE_FILE, 0o600)  # owner read/write only
     print_success(f"Style profile saved to {STYLE_PROFILE_FILE}")
     print_success(f"Analyzed {len(bodies)} emails, avg {round(avg_length)} words each.")
-    print_info("Note: Truncated email snippets are stored locally and sent to Claude API for style matching.")
+    print_info(
+        "Note: Truncated email snippets are stored locally and "
+        "sent to Claude API for style matching."
+    )
 
     return profile
 
@@ -169,7 +175,9 @@ def show_profile() -> None:
     table.add_row("Formality", profile.get("formality", "?"))
     table.add_row("Greetings", ", ".join(profile.get("greeting_patterns", [])) or "(none detected)")
     table.add_row("Sign-offs", ", ".join(profile.get("signoff_patterns", [])) or "(none detected)")
-    table.add_row("Common Phrases", ", ".join(profile.get("common_phrases", [])) or "(none detected)")
+    table.add_row(
+        "Common Phrases", ", ".join(profile.get("common_phrases", [])) or "(none detected)"
+    )
     table.add_row("Uses Emoji", str(profile.get("uses_emoji", False)))
     table.add_row("Punctuation", profile.get("punctuation_style", "?"))
     table.add_row("Emails Analyzed", str(profile.get("emails_analyzed", 0)))
@@ -184,10 +192,22 @@ def show_profile() -> None:
 # --- Helpers ---
 
 _COMMON_PHRASES = [
-    "sounds good", "let me know", "happy to", "thanks for",
-    "looking forward", "no worries", "makes sense", "good to know",
-    "got it", "will do", "for sure", "appreciate it", "take care",
-    "hope this helps", "just wanted to", "quick question",
+    "sounds good",
+    "let me know",
+    "happy to",
+    "thanks for",
+    "looking forward",
+    "no worries",
+    "makes sense",
+    "good to know",
+    "got it",
+    "will do",
+    "for sure",
+    "appreciate it",
+    "take care",
+    "hope this helps",
+    "just wanted to",
+    "quick question",
 ]
 
 _GREETING_PATTERNS = [
@@ -247,8 +267,10 @@ def _extract_signoff(last_lines: list[str]) -> Optional[str]:
 
 
 def _assess_formality(
-    greetings: Counter, signoffs: Counter,
-    avg_length: float, excl_ratio: float,
+    greetings: Counter,
+    signoffs: Counter,
+    avg_length: float,
+    excl_ratio: float,
 ) -> str:
     """Determine formality level from style signals."""
     formal_greetings = {"Dear", "Hello", "Good morning", "Good afternoon", "Good evening"}

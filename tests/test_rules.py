@@ -148,3 +148,53 @@ class TestMatchesConditions:
         assert _matches_conditions(msg, {"sender_is": "someone@example.com"}) is False
         # But empty conditions still matches
         assert _matches_conditions(msg, {}) is True
+
+
+class TestMultiValueConditions:
+    """A list condition value matches if ANY of its values match (OR)."""
+
+    def _msg(self, **kw):
+        base = {"Sender": {"Address": "a@b.com"}, "Subject": "Hi", "Time": int(time.time())}
+        base.update(kw)
+        return base
+
+    def test_sender_domain_list_matches_any(self):
+        msg = self._msg(Sender={"Address": "noreply@github.com"})
+        conds = {"sender_domain": ["gitlab.com", "github.com"]}
+        assert _matches_conditions(msg, conds) is True
+
+    def test_sender_domain_list_no_match(self):
+        msg = self._msg(Sender={"Address": "noreply@example.com"})
+        conds = {"sender_domain": ["gitlab.com", "github.com"]}
+        assert _matches_conditions(msg, conds) is False
+
+    def test_sender_is_list(self):
+        msg = self._msg(Sender={"Address": "boss@company.com"})
+        assert _matches_conditions(msg, {"sender_is": ["a@b.com", "boss@company.com"]}) is True
+
+    def test_subject_contains_list(self):
+        msg = self._msg(Subject="Your weekly digest")
+        assert _matches_conditions(msg, {"subject_contains": ["invoice", "digest"]}) is True
+
+
+class TestRegexConditions:
+    """sender_matches / subject_matches use case-insensitive regex search."""
+
+    def _msg(self, addr="user@example.com", subject="Hello"):
+        return {"Sender": {"Address": addr}, "Subject": subject, "Time": int(time.time())}
+
+    def test_sender_matches_regex(self):
+        msg = self._msg(addr="no-reply+123@mail.example.com")
+        assert _matches_conditions(msg, {"sender_matches": r"no-?reply"}) is True
+
+    def test_sender_matches_no_match(self):
+        msg = self._msg(addr="alice@example.com")
+        assert _matches_conditions(msg, {"sender_matches": r"^bob@"}) is False
+
+    def test_subject_matches_regex(self):
+        msg = self._msg(subject="Invoice #4821 due")
+        assert _matches_conditions(msg, {"subject_matches": r"invoice #\d+"}) is True
+
+    def test_regex_is_case_insensitive(self):
+        msg = self._msg(subject="URGENT")
+        assert _matches_conditions(msg, {"subject_matches": r"urgent"}) is True

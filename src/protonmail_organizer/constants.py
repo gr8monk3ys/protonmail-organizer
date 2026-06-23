@@ -30,7 +30,7 @@ SYSTEM_LABELS = {
 }
 
 # Label type IDs used by the API
-LABEL_TYPE_LABEL = 1   # User-defined labels
+LABEL_TYPE_LABEL = 1  # User-defined labels
 LABEL_TYPE_FOLDER = 3  # User-defined folders
 LABEL_TYPE_SYSTEM = 4  # System labels
 
@@ -44,12 +44,28 @@ BATCH_DELAY_SECONDS = 0.2
 
 # Available label colors (ProtonMail's palette)
 LABEL_COLORS = [
-    "#7272a7", "#8989ac", "#cf5858", "#cf7e7e",
-    "#c26cc7", "#c793ca", "#7569d1", "#9b94d1",
-    "#69a9d1", "#a8c4d5", "#5ec7b7", "#97c9c1",
-    "#72bb75", "#9db99f", "#c3d261", "#c6cd97",
-    "#e6c04c", "#e7d292", "#e6984c", "#dfb286",
-    "#8d7f6b", "#b4a898",
+    "#7272a7",
+    "#8989ac",
+    "#cf5858",
+    "#cf7e7e",
+    "#c26cc7",
+    "#c793ca",
+    "#7569d1",
+    "#9b94d1",
+    "#69a9d1",
+    "#a8c4d5",
+    "#5ec7b7",
+    "#97c9c1",
+    "#72bb75",
+    "#9db99f",
+    "#c3d261",
+    "#c6cd97",
+    "#e6c04c",
+    "#e7d292",
+    "#e6984c",
+    "#dfb286",
+    "#8d7f6b",
+    "#b4a898",
 ]
 
 DEFAULT_LABEL_COLOR = "#7272a7"

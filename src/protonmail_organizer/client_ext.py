@@ -9,7 +9,6 @@ from protonmail.models import AccountAddress, PgpPairKeys
 
 from .constants import LABEL_TYPE_LABEL
 
-
 # The library uses 'mail' as the base key for urls_api, with the
 # full API path as the endpoint (e.g. 'core/v4/labels', 'mail/v4/messages').
 BASE = "mail"
@@ -26,14 +25,16 @@ class ProtonMailExt(ProtonMail):
         if not user_private_key_password:
             user_private_key_password = self._get_user_private_key_password(password)
 
-        self.pgp.pairs_keys.append(PgpPairKeys(
-            is_user_key=True,
-            is_primary=True,
-            fingerprint_private=user_pair_key["Fingerprint"],
-            private_key=user_pair_key["PrivateKey"],
-            passphrase=user_private_key_password,
-            email=user_info["Email"],
-        ))
+        self.pgp.pairs_keys.append(
+            PgpPairKeys(
+                is_user_key=True,
+                is_primary=True,
+                fingerprint_private=user_pair_key["Fingerprint"],
+                private_key=user_pair_key["PrivateKey"],
+                passphrase=user_private_key_password,
+                email=user_info["Email"],
+            )
+        )
         self.logger.info("got user keys", "green")
 
         account_addresses = self._ProtonMail__addresses()["Addresses"]
@@ -46,19 +47,22 @@ class ProtonMailExt(ProtonMail):
             for ak in aa["Keys"]:
                 try:
                     ap = self.pgp.decrypt(
-                        ak["Token"], user_pair_key["PrivateKey"],
+                        ak["Token"],
+                        user_pair_key["PrivateKey"],
                         user_private_key_password,
                     )
-                    self.pgp.pairs_keys.append(PgpPairKeys(
-                        is_user_key=False,
-                        is_primary=bool(ak["Primary"]),
-                        fingerprint_public=ak["Fingerprints"][0],
-                        fingerprint_private=ak["Fingerprints"][1],
-                        public_key=ak["PublicKey"],
-                        private_key=ak["PrivateKey"],
-                        passphrase=ap,
-                        email=aa["Email"],
-                    ))
+                    self.pgp.pairs_keys.append(
+                        PgpPairKeys(
+                            is_user_key=False,
+                            is_primary=bool(ak["Primary"]),
+                            fingerprint_public=ak["Fingerprints"][0],
+                            fingerprint_private=ak["Fingerprints"][1],
+                            public_key=ak["PublicKey"],
+                            private_key=ak["PrivateKey"],
+                            passphrase=ap,
+                            email=aa["Email"],
+                        )
+                    )
                 except Exception:
                     pass  # skip undecryptable address keys (old/unused)
         self.logger.info("got email keys", "green")
@@ -197,9 +201,7 @@ class ProtonMailExt(ProtonMail):
 
     # --- Conversation Label Operations ---
 
-    def set_label_for_conversations(
-        self, label_id: str, conversation_ids: list
-    ) -> dict:
+    def set_label_for_conversations(self, label_id: str, conversation_ids: list) -> dict:
         """Apply a label to conversations."""
         payload = {
             "LabelID": label_id,
@@ -208,9 +210,7 @@ class ProtonMailExt(ProtonMail):
         response = self._put(BASE, "mail/v4/conversations/label", json=payload)
         return response.json()
 
-    def unset_label_for_conversations(
-        self, label_id: str, conversation_ids: list
-    ) -> dict:
+    def unset_label_for_conversations(self, label_id: str, conversation_ids: list) -> dict:
         """Remove a label from conversations."""
         payload = {
             "LabelID": label_id,

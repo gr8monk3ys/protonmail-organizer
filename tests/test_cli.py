@@ -11,7 +11,6 @@ from click.testing import CliRunner
 
 from protonmail_organizer.cli import cli
 
-
 runner = CliRunner()
 
 

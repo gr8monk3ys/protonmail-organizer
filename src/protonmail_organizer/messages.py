@@ -11,13 +11,12 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .client_ext import ProtonMailExt
-from .constants import INBOX, SYSTEM_LABELS, LABEL_TYPE_LABEL, LABEL_TYPE_FOLDER
+from .constants import INBOX, SYSTEM_LABELS
 from .display import (
     console,
     message_table,
     print_error,
     print_info,
-    print_success,
     print_warning,
     stats_panel,
 )
@@ -94,15 +93,17 @@ def read_message(client: ProtonMailExt, message_id: str) -> None:
     sender_str = f"{sender.name} <{sender.address}>" if sender else "?"
     date_str = datetime.fromtimestamp(msg.time).strftime("%Y-%m-%d %H:%M") if msg.time else ""
 
-    console.print(Panel(
-        f"[cyan]From:[/cyan] {sender_str}\n"
-        f"[cyan]Subject:[/cyan] {msg.subject}\n"
-        f"[cyan]Date:[/cyan] {date_str}\n"
-        f"[cyan]ID:[/cyan] {msg.id}\n"
-        f"\n{msg.body or '(empty body)'}",
-        title="Message",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            f"[cyan]From:[/cyan] {sender_str}\n"
+            f"[cyan]Subject:[/cyan] {msg.subject}\n"
+            f"[cyan]Date:[/cyan] {date_str}\n"
+            f"[cyan]ID:[/cyan] {msg.id}\n"
+            f"\n{msg.body or '(empty body)'}",
+            title="Message",
+            border_style="blue",
+        )
+    )
 
 
 def count_messages(client: ProtonMailExt, folder: Optional[str] = None) -> None:
@@ -192,9 +193,16 @@ def digest_report(client: ProtonMailExt, days: int = 1) -> None:
 
     # Newsletter detection heuristics (reuse from cleanup)
     newsletter_patterns = [
-        r"noreply@", r"no-reply@", r"newsletter@", r"notifications?@",
-        r"updates?@", r"marketing@", r"digest@", r"mailer@",
-        r"mailchimp", r"sendgrid",
+        r"noreply@",
+        r"no-reply@",
+        r"newsletter@",
+        r"notifications?@",
+        r"updates?@",
+        r"marketing@",
+        r"digest@",
+        r"mailer@",
+        r"mailchimp",
+        r"sendgrid",
     ]
 
     for msg in recent:
@@ -209,20 +217,24 @@ def digest_report(client: ProtonMailExt, days: int = 1) -> None:
         # Check if from a real person (not newsletter)
         is_newsletter = any(re.search(p, addr.lower()) for p in newsletter_patterns)
         if msg.get("Unread", 0) and not is_newsletter:
-            real_people_unread.append({
-                "from": name or addr,
-                "subject": msg.get("Subject", "(no subject)"),
-            })
+            real_people_unread.append(
+                {
+                    "from": name or addr,
+                    "subject": msg.get("Subject", "(no subject)"),
+                }
+            )
 
     # Summary panel
-    console.print(Panel(
-        f"[cyan]Period:[/cyan] Last {days} day(s)\n"
-        f"[cyan]Total messages:[/cyan] {total}\n"
-        f"[cyan]Unread:[/cyan] {unread}\n"
-        f"[cyan]Unique domains:[/cyan] {len(domain_counts)}",
-        title="Digest Summary",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            f"[cyan]Period:[/cyan] Last {days} day(s)\n"
+            f"[cyan]Total messages:[/cyan] {total}\n"
+            f"[cyan]Unread:[/cyan] {unread}\n"
+            f"[cyan]Unique domains:[/cyan] {len(domain_counts)}",
+            title="Digest Summary",
+            border_style="blue",
+        )
+    )
 
     # Top sender domains
     table = Table(title="Messages by Sender Domain", show_lines=False)

@@ -8,6 +8,7 @@ when a template is applied to a message.
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -22,7 +23,6 @@ from rich.table import Table
 from .client_ext import ProtonMailExt
 from .config import CONFIG_DIR, ensure_config_dir
 from .display import console, print_error, print_info, print_success, print_warning
-
 
 TEMPLATES_FILE = CONFIG_DIR / "templates.json"
 
@@ -97,9 +97,7 @@ def _open_in_editor(initial_text: str = "") -> Optional[str]:
     if editor:
         tmp_path = None
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".txt", delete=False
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
                 f.write(initial_text)
                 tmp_path = f.name
 
@@ -191,10 +189,7 @@ def create_template(name: str, body: Optional[str] = None) -> None:
 
     # Get body content
     if body is None:
-        console.print(
-            f"[dim]Available placeholders: "
-            f"{', '.join(PLACEHOLDERS.keys())}[/dim]"
-        )
+        console.print(f"[dim]Available placeholders: {', '.join(PLACEHOLDERS.keys())}[/dim]")
         body = _open_in_editor()
 
     if not body or not body.strip():
@@ -296,9 +291,9 @@ def delete_template(name: str, skip_confirm: bool = False) -> None:
         return
 
     if not skip_confirm:
-        answer = console.input(
-            f"[bold red]Delete template '{name}'? (y/N): [/bold red]"
-        ).strip().lower()
+        answer = (
+            console.input(f"[bold red]Delete template '{name}'? (y/N): [/bold red]").strip().lower()
+        )
         if answer != "y":
             print_warning("Cancelled.")
             return
@@ -343,17 +338,24 @@ def use_template(
     sender = getattr(msg, "sender", None)
     sender_name = sender.name if sender else ""
     sender_email = sender.address if sender else ""
-    sender_first = sender_name.split()[0] if sender_name and sender_name.split() else sender_email.split("@")[0] if sender_email else ""
+    sender_first = (
+        sender_name.split()[0]
+        if sender_name and sender_name.split()
+        else sender_email.split("@")[0]
+        if sender_email
+        else ""
+    )
     subject = msg.subject if hasattr(msg, "subject") else ""
 
     # Show original message context
     sender_str = f"{sender_name} <{sender_email}>" if sender_name else sender_email
-    console.print(Panel(
-        f"[cyan]From:[/cyan] {sender_str}\n"
-        f"[cyan]Subject:[/cyan] {subject}",
-        title="Replying to",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            f"[cyan]From:[/cyan] {sender_str}\n[cyan]Subject:[/cyan] {subject}",
+            title="Replying to",
+            border_style="blue",
+        )
+    )
 
     # Fill placeholders
     filled_body = tpl["body"]
@@ -372,17 +374,15 @@ def use_template(
     current_draft = filled_body
 
     while True:
-        console.print(Panel(
-            current_draft,
-            title=f"Template Reply: {template_name}",
-            border_style="green",
-        ))
-
         console.print(
-            "[bold][S][/bold]end  "
-            "[bold][E][/bold]dit  "
-            "[bold][C][/bold]ancel"
+            Panel(
+                current_draft,
+                title=f"Template Reply: {template_name}",
+                border_style="green",
+            )
         )
+
+        console.print("[bold][S][/bold]end  [bold][E][/bold]dit  [bold][C][/bold]ancel")
         action = console.input("[bold]Action: [/bold]").strip().lower()
 
         if action in ("s", "send"):
@@ -424,13 +424,21 @@ def _send_template_reply(
 
     recipient_addr = sender.address
 
+    # Thread the reply onto the original conversation via its Message-ID, and
+    # render the plain-text template as HTML so newlines survive (ProtonMail
+    # stores bodies as HTML).
+    extra = getattr(original_msg, "extra", None)
+    in_reply_to = extra.get("ExternalID") if isinstance(extra, dict) else None
+    body_html = html.escape(draft_body).replace("\n", "<br>\n")
+
     try:
         from protonmail import ProtonMail
 
         message = ProtonMail.create_message(
             recipients=[recipient_addr],
             subject=subject,
-            body=draft_body,
+            body=body_html,
+            in_reply_to=in_reply_to,
         )
         client.send_message(message)
         print_success(f"Reply sent to {recipient_addr}")

@@ -64,36 +64,43 @@ def _handle_choice(client: ProtonMailExt, choice: str) -> None:
 
     if choice == "1":
         from .messages import list_messages
+
         folder = console.input("Folder ID [0=Inbox]: ").strip() or INBOX
         list_messages(client, folder)
 
     elif choice == "2":
         from .messages import search_messages
+
         keyword = console.input("Search keyword (or empty): ").strip() or None
         sender = console.input("Sender filter (or empty): ").strip() or None
         search_messages(client, keyword=keyword, sender=sender)
 
     elif choice == "3":
         from .labels import list_labels
+
         list_labels(client, "all")
 
     elif choice == "4":
         from .labels import create_label
+
         name = console.input("Label name: ").strip()
         if not name:
             print_warning("Name required.")
             return
         is_folder = console.input("Create as folder? (y/N): ").strip().lower() == "y"
-        from .constants import LABEL_TYPE_FOLDER, LABEL_TYPE_LABEL, DEFAULT_LABEL_COLOR
+        from .constants import DEFAULT_LABEL_COLOR, LABEL_TYPE_FOLDER, LABEL_TYPE_LABEL
+
         label_type = LABEL_TYPE_FOLDER if is_folder else LABEL_TYPE_LABEL
         create_label(client, name, DEFAULT_LABEL_COLOR, label_type)
 
     elif choice == "5":
         from .messages import count_messages
+
         count_messages(client)
 
     elif choice == "6":
         from .cleanup import delete_old_messages
+
         days_str = console.input("Delete messages older than N days: ").strip()
         try:
             days = int(days_str)
@@ -105,6 +112,7 @@ def _handle_choice(client: ProtonMailExt, choice: str) -> None:
 
     elif choice == "7":
         from .cleanup import archive_by_sender
+
         pattern = console.input("Sender pattern (email or domain): ").strip()
         if not pattern:
             print_warning("Pattern required.")
@@ -114,10 +122,12 @@ def _handle_choice(client: ProtonMailExt, choice: str) -> None:
 
     elif choice == "8":
         from .cleanup import handle_newsletters
+
         handle_newsletters(client, dry_run=True)
 
     elif choice == "9":
         from .cleanup import empty_folder
+
         empty_folder(client, TRASH)
         also_spam = console.input("Also empty Spam? (y/N): ").strip().lower() == "y"
         if also_spam:
@@ -125,15 +135,18 @@ def _handle_choice(client: ProtonMailExt, choice: str) -> None:
 
     elif choice == "10":
         from .rules import run_rules
+
         dry = console.input("Dry run? (Y/n): ").strip().lower() != "n"
         run_rules(client, dry_run=dry)
 
     elif choice == "11":
         from .messages import show_stats
+
         show_stats(client)
 
     elif choice == "12":
         from .messages import digest_report
+
         days_str = console.input("Days to summarize [1]: ").strip() or "1"
         try:
             days = int(days_str)
@@ -144,30 +157,37 @@ def _handle_choice(client: ProtonMailExt, choice: str) -> None:
 
     elif choice == "13":
         from .filters import preview_sieve
+
         preview_sieve()
 
     elif choice == "14":
         from .responder import respond_interactive
+
         respond_interactive(client)
 
     elif choice == "15":
         from .cleanup import find_unsubscribe_links
+
         find_unsubscribe_links(client)
 
     elif choice == "16":
         from .rule_analytics import rule_stats
+
         rule_stats(client)
 
     elif choice == "17":
         from .rule_analytics import suggest_rules
+
         suggest_rules(client)
 
     elif choice == "18":
         from .templates import list_templates
+
         list_templates()
 
     elif choice == "19":
         from .templates import use_template
+
         tpl_name = console.input("Template name: ").strip()
         if not tpl_name:
             print_warning("Template name required.")
