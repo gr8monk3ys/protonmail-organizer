@@ -6,7 +6,24 @@ build-backend = "setuptools.build_meta"
 name = "protonmail-organizer"
 version = "0.1.0"
 description = "CLI tool to organize your ProtonMail inbox"
+readme = "README.md"
 requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "gr8monk3ys" }]
+keywords = ["protonmail", "email", "cli", "inbox", "automation", "sieve"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Email",
+    "Topic :: Utilities",
+]
 dependencies = [
     "protonmail-api-client==2.4.3",
     "click>=8.1",
@@ -19,8 +36,27 @@ dependencies = [
 ai = ["anthropic>=0.40.0"]
 test = ["pytest>=7.0", "pytest-mock>=3.10"]
 
+[project.urls]
+Homepage = "https://github.com/gr8monk3ys/protonmail-organizer"
+Repository = "https://github.com/gr8monk3ys/protonmail-organizer"
+Issues = "https://github.com/gr8monk3ys/protonmail-organizer/issues"
+
 [project.scripts]
 pmo = "protonmail_organizer.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

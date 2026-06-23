@@ -67,10 +67,7 @@ def create_label(
 
     try:
         result = client.create_label(name, color, label_type)
-        print_success(
-            f"Created {type_name} '{name}' "
-            f"({len(existing) + 1}/{max_allowed} used)"
-        )
+        print_success(f"Created {type_name} '{name}' ({len(existing) + 1}/{max_allowed} used)")
         return result
     except Exception as e:
         print_error(f"Failed to create {type_name}: {e}")
@@ -84,9 +81,11 @@ def delete_label(
 ) -> None:
     """Delete a label or folder by ID."""
     if not skip_confirm:
-        confirm = console.input(
-            f"[yellow]Delete label/folder {label_id}? (y/N): [/yellow]"
-        ).strip().lower()
+        confirm = (
+            console.input(f"[yellow]Delete label/folder {label_id}? (y/N): [/yellow]")
+            .strip()
+            .lower()
+        )
         if confirm != "y":
             print_warning("Cancelled.")
             return

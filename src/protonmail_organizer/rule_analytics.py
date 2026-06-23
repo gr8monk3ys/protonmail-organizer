@@ -13,17 +13,16 @@ from .config import RULES_FILE
 from .constants import INBOX
 from .display import (
     console,
-    print_error,
     print_info,
     print_success,
     print_warning,
 )
 from .rules import _load_rules, _matches_conditions
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fetch_inbox_messages(
     client: ProtonMailExt,
@@ -67,6 +66,7 @@ def _extract_domain(address: str) -> str:
 # ---------------------------------------------------------------------------
 # rule_stats
 # ---------------------------------------------------------------------------
+
 
 def rule_stats(
     client: ProtonMailExt,
@@ -191,11 +191,13 @@ def rule_stats(
     ]
 
     console.print()
-    console.print(Panel(
-        "\n".join(summary_lines),
-        title="Rule Coverage Summary",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            "\n".join(summary_lines),
+            title="Rule Coverage Summary",
+            border_style="blue",
+        )
+    )
 
     if coverage < 50:
         print_warning(
@@ -209,6 +211,7 @@ def rule_stats(
 # ---------------------------------------------------------------------------
 # suggest_rules
 # ---------------------------------------------------------------------------
+
 
 def suggest_rules(
     client: ProtonMailExt,
@@ -236,10 +239,7 @@ def suggest_rules(
     # Find messages that match NO rules
     unmatched: list[dict] = []
     for msg in messages:
-        if not any(
-            _matches_conditions(msg, rule.get("conditions", {}))
-            for rule in rules
-        ):
+        if not any(_matches_conditions(msg, rule.get("conditions", {})) for rule in rules):
             unmatched.append(msg)
 
     if not unmatched:
@@ -309,17 +309,18 @@ def suggest_rules(
 
     # Display as a nice panel with copyable YAML
     console.print()
-    console.print(Panel(
-        "[bold]Add these to your rules file:[/bold]\n\n"
-        f"[dim]{RULES_FILE}[/dim]\n",
-        title="Suggested Rules",
-        border_style="green",
-    ))
+    console.print(
+        Panel(
+            f"[bold]Add these to your rules file:[/bold]\n\n[dim]{RULES_FILE}[/dim]\n",
+            title="Suggested Rules",
+            border_style="green",
+        )
+    )
 
     yaml_block = "rules:\n" + "\n\n".join(snippets) + "\n"
-    console.print(f"[green]```yaml[/green]")
+    console.print("[green]```yaml[/green]")
     console.print(yaml_block)
-    console.print(f"[green]```[/green]")
+    console.print("[green]```[/green]")
 
     # Summary table
     summary_table = Table(title="Suggestion Summary", show_lines=False)

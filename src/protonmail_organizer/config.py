@@ -3,11 +3,12 @@
 import os
 from pathlib import Path
 
-
-CONFIG_DIR = Path(os.environ.get(
-    "PMO_CONFIG_DIR",
-    os.path.expanduser("~/.config/protonmail-organizer"),
-))
+CONFIG_DIR = Path(
+    os.environ.get(
+        "PMO_CONFIG_DIR",
+        os.path.expanduser("~/.config/protonmail-organizer"),
+    )
+)
 
 SESSION_FILE = CONFIG_DIR / "session.dat"
 RULES_FILE = CONFIG_DIR / "rules.yaml"

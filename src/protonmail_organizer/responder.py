@@ -85,13 +85,16 @@ Body:
         return ""
 
 
-def respond_to_message(client: ProtonMailExt, message_id: str, context: Optional[str] = None) -> None:
+def respond_to_message(
+    client: ProtonMailExt, message_id: str, context: Optional[str] = None
+) -> None:
     """Full flow: read message, generate draft, review, optionally send."""
     # Load style profile
     profile = get_style_profile()
     if not profile:
         print_warning("No style profile found. Building one from your sent emails...")
         from .style_profile import build_style_profile
+
         profile = build_style_profile(client)
         if not profile:
             print_error("Could not build style profile. Cannot generate reply.")
@@ -110,13 +113,15 @@ def respond_to_message(client: ProtonMailExt, message_id: str, context: Optional
     subject = msg.subject if hasattr(msg, "subject") else ""
 
     # Show original message
-    console.print(Panel(
-        f"[cyan]From:[/cyan] {sender_str}\n"
-        f"[cyan]Subject:[/cyan] {subject}\n\n"
-        f"{_truncate(body, 500)}",
-        title="Replying to",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            f"[cyan]From:[/cyan] {sender_str}\n"
+            f"[cyan]Subject:[/cyan] {subject}\n\n"
+            f"{_truncate(body, 500)}",
+            title="Replying to",
+            border_style="blue",
+        )
+    )
 
     # Build message dict for generate_draft
     msg_dict = {
@@ -180,7 +185,10 @@ def respond_interactive(client: ProtonMailExt) -> None:
     selected = messages[idx]
     msg_id = selected.get("ID", "")
 
-    context = console.input("[dim]Any instructions for the reply? (or Enter to skip): [/dim]").strip() or None
+    context = (
+        console.input("[dim]Any instructions for the reply? (or Enter to skip): [/dim]").strip()
+        or None
+    )
 
     respond_to_message(client, msg_id, context)
 
@@ -190,11 +198,13 @@ def _review_and_send(client: ProtonMailExt, original_msg, draft: str) -> None:
     current_draft = draft
 
     while True:
-        console.print(Panel(
-            current_draft,
-            title="Draft Reply",
-            border_style="green",
-        ))
+        console.print(
+            Panel(
+                current_draft,
+                title="Draft Reply",
+                border_style="green",
+            )
+        )
 
         console.print(
             "[bold][S][/bold]end  "
@@ -252,6 +262,7 @@ def _send_reply(client: ProtonMailExt, original_msg, draft_body: str) -> None:
 
     try:
         from protonmail import ProtonMail
+
         message = ProtonMail.create_message(
             recipients=[recipient_addr],
             subject=subject,
@@ -316,15 +327,16 @@ def _build_system_prompt(profile: dict) -> str:
     punctuation = profile.get("punctuation_style", "minimal exclamation marks")
     samples = profile.get("sample_emails", [])
 
-    prompt = f"""You are drafting an email reply on behalf of the user. Match their writing style exactly.
+    prompt = f"""You are drafting an email reply on behalf of the user.
+Match their writing style exactly.
 
 Style profile:
 - Formality: {formality}
 - Average reply length: ~{avg_len} words
-- Greeting patterns: {', '.join(greetings) if greetings else 'varies'}
-- Sign-off patterns: {', '.join(signoffs) if signoffs else 'varies'}
-- Common phrases they use: {', '.join(phrases) if phrases else 'none detected'}
-- Emoji usage: {'yes' if uses_emoji else 'no — do not use emojis'}
+- Greeting patterns: {", ".join(greetings) if greetings else "varies"}
+- Sign-off patterns: {", ".join(signoffs) if signoffs else "varies"}
+- Common phrases they use: {", ".join(phrases) if phrases else "none detected"}
+- Emoji usage: {"yes" if uses_emoji else "no — do not use emojis"}
 - Punctuation: {punctuation}
 
 Rules:

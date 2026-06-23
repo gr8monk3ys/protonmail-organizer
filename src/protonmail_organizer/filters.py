@@ -17,9 +17,7 @@ from rich.table import Table
 
 from .client_ext import ProtonMailExt
 from .config import RULES_FILE
-from .constants import LABEL_TYPE_FOLDER, LABEL_TYPE_LABEL, SYSTEM_LABELS
 from .display import console, print_error, print_info, print_success, print_warning
-
 
 # Conditions that require runtime (time-based) — can't be expressed in Sieve
 # Note: has_attachment and unread CAN be expressed in Sieve but need special handling
@@ -120,7 +118,11 @@ def push_rules(client: ProtonMailExt, rules_file: Optional[str] = None) -> None:
 
     console.print(Syntax(sieve, "text", theme="monokai", line_numbers=True))
 
-    confirm = console.input("\n[yellow]Push this Sieve filter to ProtonMail? (y/N): [/yellow]").strip().lower()
+    confirm = (
+        console.input("\n[yellow]Push this Sieve filter to ProtonMail? (y/N): [/yellow]")
+        .strip()
+        .lower()
+    )
     if confirm != "y":
         print_warning("Cancelled.")
         return
@@ -134,7 +136,9 @@ def push_rules(client: ProtonMailExt, rules_file: Optional[str] = None) -> None:
         _suggest_manual_paste(sieve)
 
 
-def delete_filter(client: ProtonMailExt, filter_id: Optional[str] = None, delete_all: bool = False) -> None:
+def delete_filter(
+    client: ProtonMailExt, filter_id: Optional[str] = None, delete_all: bool = False
+) -> None:
     """Delete server-side filters by ID or all."""
     if delete_all:
         try:
@@ -147,9 +151,13 @@ def delete_filter(client: ProtonMailExt, filter_id: Optional[str] = None, delete
             print_warning("No filters to delete.")
             return
 
-        confirm = console.input(
-            f"[yellow]Delete all {len(filters)} server-side filter(s)? (y/N): [/yellow]"
-        ).strip().lower()
+        confirm = (
+            console.input(
+                f"[yellow]Delete all {len(filters)} server-side filter(s)? (y/N): [/yellow]"
+            )
+            .strip()
+            .lower()
+        )
         if confirm != "y":
             print_warning("Cancelled.")
             return
@@ -198,7 +206,9 @@ def compile_rules_to_sieve(rules: list, label_map: dict | None = None) -> str:
 
         # Check if this rule has runtime-only conditions
         runtime_conditions = set(conditions.keys()) & _RUNTIME_ONLY_CONDITIONS
-        sieve_conditions = {k: v for k, v in conditions.items() if k not in _RUNTIME_ONLY_CONDITIONS}
+        sieve_conditions = {
+            k: v for k, v in conditions.items() if k not in _RUNTIME_ONLY_CONDITIONS
+        }
 
         if runtime_conditions and not sieve_conditions:
             skipped.append((name, runtime_conditions))
@@ -245,7 +255,7 @@ def compile_rules_to_sieve(rules: list, label_map: dict | None = None) -> str:
 
     parts = []
     if requires:
-        parts.append(f'require [{", ".join(requires)}];')
+        parts.append(f"require [{', '.join(requires)}];")
     parts.append("")
     parts.extend(sieve_rules)
     parts.append("")
@@ -259,7 +269,9 @@ def compile_rules_to_sieve(rules: list, label_map: dict | None = None) -> str:
     return "\n".join(parts)
 
 
-def _compile_from_file(rules_file: Optional[str] = None, client: Optional[ProtonMailExt] = None) -> str:
+def _compile_from_file(
+    rules_file: Optional[str] = None, client: Optional[ProtonMailExt] = None
+) -> str:
     """Load rules from YAML and compile to Sieve."""
     path = Path(rules_file) if rules_file else RULES_FILE
     if not path.exists():
@@ -378,4 +390,4 @@ def _suggest_manual_paste(sieve: str) -> None:
     print_info("  2. Click 'Add sieve filter'")
     print_info("  3. Paste the Sieve code shown above")
     print_info("  4. Save the filter")
-    print_info(f"\nOr copy the compiled Sieve with: pmo filters preview")
+    print_info("\nOr copy the compiled Sieve with: pmo filters preview")

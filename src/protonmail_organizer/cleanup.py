@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import time
 from datetime import datetime, timedelta
-from typing import Optional
 
 from .client_ext import ProtonMailExt
 from .constants import (
@@ -13,9 +12,7 @@ from .constants import (
     BATCH_DELAY_SECONDS,
     BATCH_SIZE,
     INBOX,
-    SPAM,
     SYSTEM_LABELS,
-    TRASH,
 )
 from .display import (
     confirm_action,
@@ -49,7 +46,9 @@ def delete_old_messages(
 
     console.print(message_table(messages, title=f"Messages to delete ({len(messages)})"))
 
-    if not confirm_action(f"delete {len(messages)} messages from {folder_name}", len(messages), dry_run):
+    if not confirm_action(
+        f"delete {len(messages)} messages from {folder_name}", len(messages), dry_run
+    ):
         if not dry_run:
             print_warning("Cancelled.")
         return
@@ -73,7 +72,9 @@ def archive_by_sender(
 
     console.print(message_table(messages, title=f"Messages to archive ({len(messages)})"))
 
-    if not confirm_action(f"archive {len(messages)} messages from '{pattern}'", len(messages), dry_run):
+    if not confirm_action(
+        f"archive {len(messages)} messages from '{pattern}'", len(messages), dry_run
+    ):
         if not dry_run:
             print_warning("Cancelled.")
         return
@@ -135,6 +136,7 @@ def empty_folder(
 
 # --- Helpers ---
 
+
 def _batch_delete(client: ProtonMailExt, messages: list) -> None:
     """Delete messages in batches with progress and delay."""
     ids = [m.get("ID", m.id if hasattr(m, "id") else m) for m in messages]
@@ -143,7 +145,7 @@ def _batch_delete(client: ProtonMailExt, messages: list) -> None:
     with progress_context() as progress:
         task = progress.add_task("Deleting...", total=total)
         for i in range(0, total, BATCH_SIZE):
-            batch = ids[i:i + BATCH_SIZE]
+            batch = ids[i : i + BATCH_SIZE]
             try:
                 client.delete_messages(batch)
             except Exception as e:
@@ -168,7 +170,7 @@ def _batch_label(
     with progress_context() as progress:
         task = progress.add_task(f"{action.capitalize()}ing...", total=total)
         for i in range(0, total, BATCH_SIZE):
-            batch = ids[i:i + BATCH_SIZE]
+            batch = ids[i : i + BATCH_SIZE]
             try:
                 client.set_label_for_messages(label_id, batch)
             except Exception as e:
@@ -259,12 +261,14 @@ def find_unsubscribe_links(client: ProtonMailExt, limit: int = 50) -> None:
             urls = re.findall(r"<(https?://[^>]+)>", unsub)
             mailto = re.findall(r"<(mailto:[^>]+)>", unsub)
 
-            unsubscribe_entries.append({
-                "sender": name or addr,
-                "address": addr,
-                "urls": urls,
-                "mailto": mailto,
-            })
+            unsubscribe_entries.append(
+                {
+                    "sender": name or addr,
+                    "address": addr,
+                    "urls": urls,
+                    "mailto": mailto,
+                }
+            )
 
     if not unsubscribe_entries:
         print_warning("No messages with unsubscribe links found.")
@@ -286,7 +290,11 @@ def find_unsubscribe_links(client: ProtonMailExt, limit: int = 50) -> None:
     table.add_column("Unsubscribe URL", style="blue")
 
     for i, entry in enumerate(unique_entries, 1):
-        url = entry["urls"][0] if entry["urls"] else (entry["mailto"][0] if entry["mailto"] else "(header only)")
+        url = (
+            entry["urls"][0]
+            if entry["urls"]
+            else (entry["mailto"][0] if entry["mailto"] else "(header only)")
+        )
         table.add_row(str(i), entry["sender"], url)
 
     console.print(table)

@@ -6,13 +6,12 @@ import time
 from datetime import datetime
 from typing import Optional
 
-from rich.live import Live
 from rich.table import Table
 
 from .client_ext import ProtonMailExt
 from .constants import INBOX
-from .display import console, print_error, print_info, print_success, print_warning
-from .rules import _load_rules, _matches_conditions, _apply_actions
+from .display import console, print_error, print_info, print_success
+from .rules import _apply_actions, _load_rules, _matches_conditions
 
 
 def watch_inbox(
@@ -38,6 +37,7 @@ def watch_inbox(
     for label in all_labels:
         label_map[label.name.lower()] = label.id
     from .constants import SYSTEM_LABELS
+
     for label_id, name in SYSTEM_LABELS.items():
         label_map[name.lower()] = label_id
 
@@ -108,17 +108,17 @@ def _poll_cycle(
             for rule in matched_rules:
                 name = rule.get("name", "Unnamed")
                 actions = rule.get("actions", {})
-                console.print(
-                    f"  [green]>[/green] [bold]{name}[/bold] → {addr} | {subject[:50]}"
-                )
+                console.print(f"  [green]>[/green] [bold]{name}[/bold] → {addr} | {subject[:50]}")
                 try:
                     _apply_actions(client, [msg], actions, label_map)
-                    action_log.append({
-                        "time": now,
-                        "rule": name,
-                        "sender": addr,
-                        "subject": subject[:50],
-                    })
+                    action_log.append(
+                        {
+                            "time": now,
+                            "rule": name,
+                            "sender": addr,
+                            "subject": subject[:50],
+                        }
+                    )
                 except Exception as e:
                     console.print(f"  [red]Failed to apply rule '{name}': {e}[/red]")
         else:

@@ -13,10 +13,10 @@ from protonmail_organizer.style_profile import (
     _truncate_to_sentences,
 )
 
-
 # ---------------------------------------------------------------------------
 # HTML stripping
 # ---------------------------------------------------------------------------
+
 
 class TestStripHtml:
     """Tests for _strip_html helper."""
@@ -55,6 +55,7 @@ class TestStripHtml:
 # ---------------------------------------------------------------------------
 # Greeting extraction
 # ---------------------------------------------------------------------------
+
 
 class TestExtractGreeting:
     """Tests for _extract_greeting pattern matching."""
@@ -95,6 +96,7 @@ class TestExtractGreeting:
 # ---------------------------------------------------------------------------
 # Sign-off extraction
 # ---------------------------------------------------------------------------
+
 
 class TestExtractSignoff:
     """Tests for _extract_signoff pattern matching."""
@@ -137,6 +139,7 @@ class TestExtractSignoff:
 # Truncation
 # ---------------------------------------------------------------------------
 
+
 class TestTruncateToSentences:
     """Tests for _truncate_to_sentences helper."""
 
@@ -172,6 +175,7 @@ class TestTruncateToSentences:
 # Formality assessment
 # ---------------------------------------------------------------------------
 
+
 class TestAssessFormality:
     """Tests for _assess_formality style classification."""
 
@@ -205,6 +209,7 @@ class TestAssessFormality:
 # ---------------------------------------------------------------------------
 # Punctuation description
 # ---------------------------------------------------------------------------
+
 
 class TestDescribePunctuation:
     """Tests for _describe_punctuation style description."""

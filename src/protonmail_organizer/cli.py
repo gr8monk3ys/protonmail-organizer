@@ -27,6 +27,7 @@ def cli():
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 
+
 @cli.group()
 def auth():
     """Login, logout, and session management."""
@@ -53,6 +54,7 @@ def auth_logout():
 
 # ── Messages ─────────────────────────────────────────────────────────────────
 
+
 @cli.group()
 def messages():
     """List, search, read, and count messages."""
@@ -67,6 +69,7 @@ def messages_list(folder, limit, page):
     """List messages in a folder."""
     client = get_authenticated_client()
     from .messages import list_messages
+
     list_messages(client, folder, limit, page)
 
 
@@ -82,13 +85,19 @@ def search(keyword, sender, recipient, has_attachments, days, folder, limit):
     """Search messages with filters."""
     client = get_authenticated_client()
     from .messages import search_messages
+
     begin = None
     if days:
         begin = int((datetime.now() - timedelta(days=days)).timestamp())
     search_messages(
-        client, keyword=keyword, sender=sender, recipient=recipient,
-        begin=begin, has_attachments=has_attachments or None,
-        label_id=folder, limit=limit,
+        client,
+        keyword=keyword,
+        sender=sender,
+        recipient=recipient,
+        begin=begin,
+        has_attachments=has_attachments or None,
+        label_id=folder,
+        limit=limit,
     )
 
 
@@ -98,6 +107,7 @@ def read(message_id):
     """Read a message by ID."""
     client = get_authenticated_client()
     from .messages import read_message
+
     read_message(client, message_id)
 
 
@@ -107,10 +117,12 @@ def count(folder):
     """Show message counts by folder."""
     client = get_authenticated_client()
     from .messages import count_messages
+
     count_messages(client, folder)
 
 
 # ── Labels ───────────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def labels():
@@ -119,12 +131,18 @@ def labels():
 
 
 @labels.command(name="list")
-@click.option("--type", "label_type", type=click.Choice(["all", "labels", "folders", "system"]),
-              default="all", help="Filter by type.")
+@click.option(
+    "--type",
+    "label_type",
+    type=click.Choice(["all", "labels", "folders", "system"]),
+    default="all",
+    help="Filter by type.",
+)
 def labels_list(label_type):
     """List labels and folders."""
     client = get_authenticated_client()
     from .labels import list_labels
+
     list_labels(client, label_type)
 
 
@@ -136,6 +154,7 @@ def create(name, color, folder):
     """Create a new label or folder."""
     client = get_authenticated_client()
     from .labels import create_label
+
     label_type = LABEL_TYPE_FOLDER if folder else LABEL_TYPE_LABEL
     create_label(client, name, color, label_type)
 
@@ -147,6 +166,7 @@ def delete(label_id, yes):
     """Delete a label or folder by ID."""
     client = get_authenticated_client()
     from .labels import delete_label
+
     delete_label(client, label_id, skip_confirm=yes)
 
 
@@ -161,10 +181,12 @@ def apply(label_id, message_ids, remove):
         return
     client = get_authenticated_client()
     from .labels import apply_label
+
     apply_label(client, label_id, list(message_ids), remove=remove)
 
 
 # ── Cleanup ──────────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def cleanup():
@@ -180,6 +202,7 @@ def old(days, folder, dry_run):
     """Delete messages older than N days."""
     client = get_authenticated_client()
     from .cleanup import delete_old_messages
+
     delete_old_messages(client, days, folder, dry_run)
 
 
@@ -190,6 +213,7 @@ def sender(pattern, dry_run):
     """Archive all messages from a sender pattern."""
     client = get_authenticated_client()
     from .cleanup import archive_by_sender
+
     archive_by_sender(client, pattern, dry_run)
 
 
@@ -200,6 +224,7 @@ def newsletters(dry_run, do_delete):
     """Detect and optionally delete newsletter messages."""
     client = get_authenticated_client()
     from .cleanup import handle_newsletters
+
     handle_newsletters(client, dry_run, do_delete)
 
 
@@ -210,6 +235,7 @@ def empty_trash(include_spam, yes):
     """Empty Trash (and optionally Spam)."""
     client = get_authenticated_client()
     from .cleanup import empty_folder
+
     empty_folder(client, TRASH, skip_confirm=yes)
     if include_spam:
         empty_folder(client, SPAM, skip_confirm=yes)
@@ -221,10 +247,12 @@ def unsubscribe(limit):
     """Find messages with unsubscribe links."""
     client = get_authenticated_client()
     from .cleanup import find_unsubscribe_links
+
     find_unsubscribe_links(client, limit)
 
 
 # ── Rules ────────────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def rules():
@@ -239,6 +267,7 @@ def rules_run(dry_run, rules_file):
     """Run rules against your inbox."""
     client = get_authenticated_client()
     from .rules import run_rules
+
     run_rules(client, rules_file, dry_run)
 
 
@@ -247,6 +276,7 @@ def rules_run(dry_run, rules_file):
 def rules_list(rules_file):
     """List configured rules."""
     from .rules import list_rules
+
     list_rules(rules_file)
 
 
@@ -256,6 +286,7 @@ def validate(rules_file):
     """Validate rules file syntax and references."""
     client = get_authenticated_client()
     from .rules import validate_rules
+
     validate_rules(client, rules_file)
 
 
@@ -263,6 +294,7 @@ def validate(rules_file):
 def init():
     """Create an example rules file."""
     from .rules import init_rules
+
     init_rules()
 
 
@@ -273,6 +305,7 @@ def rules_stats(rules_file, limit):
     """Show rule coverage stats and unmatched senders."""
     client = get_authenticated_client()
     from .rule_analytics import rule_stats
+
     rule_stats(client, rules_file, limit)
 
 
@@ -283,10 +316,12 @@ def suggest(rules_file, limit):
     """Suggest new rules based on unmatched messages."""
     client = get_authenticated_client()
     from .rule_analytics import suggest_rules
+
     suggest_rules(client, rules_file, limit)
 
 
 # ── Filters (Server-Side Sieve) ─────────────────────────────────────────────
+
 
 @cli.group()
 def filters():
@@ -299,6 +334,7 @@ def filters_list():
     """Show active server-side filters."""
     client = get_authenticated_client()
     from .filters import list_filters
+
     list_filters(client)
 
 
@@ -308,6 +344,7 @@ def push(rules_file):
     """Compile YAML rules to Sieve and push to ProtonMail."""
     client = get_authenticated_client()
     from .filters import push_rules
+
     push_rules(client, rules_file)
 
 
@@ -316,6 +353,7 @@ def pull():
     """Download server-side filters and show Sieve code."""
     client = get_authenticated_client()
     from .filters import pull_filters
+
     pull_filters(client)
 
 
@@ -329,6 +367,7 @@ def filters_delete(filter_id, delete_all):
         return
     client = get_authenticated_client()
     from .filters import delete_filter
+
     delete_filter(client, filter_id, delete_all)
 
 
@@ -337,6 +376,7 @@ def filters_delete(filter_id, delete_all):
 def preview(rules_file):
     """Show compiled Sieve without pushing."""
     from .filters import preview_sieve
+
     preview_sieve(rules_file)
 
 
@@ -347,8 +387,10 @@ def preview(rules_file):
 def update(filter_id, rules_file, name):
     """Update an existing server-side filter with recompiled rules."""
     client = get_authenticated_client()
+    from .display import print_error as _print_error
+    from .display import print_success as _print_success
     from .filters import _compile_from_file
-    from .display import print_error as _print_error, print_success as _print_success
+
     sieve = _compile_from_file(rules_file, client=client)
     if not sieve:
         return
@@ -360,6 +402,7 @@ def update(filter_id, rules_file, name):
 
 
 # ── Respond (AI Draft Replies) ───────────────────────────────────────────────
+
 
 @cli.group()
 def respond():
@@ -374,6 +417,7 @@ def respond_to(message_id, context):
     """Generate a draft reply for a specific message."""
     client = get_authenticated_client()
     from .responder import respond_to_message
+
     respond_to_message(client, message_id, context)
 
 
@@ -382,6 +426,7 @@ def respond_interactive():
     """Pick a message from inbox, then draft a reply."""
     client = get_authenticated_client()
     from .responder import respond_interactive as _respond_interactive
+
     _respond_interactive(client)
 
 
@@ -393,13 +438,16 @@ def profile(refresh, samples):
     if refresh:
         client = get_authenticated_client()
         from .style_profile import refresh_profile
+
         refresh_profile(client, samples)
     else:
         from .style_profile import show_profile
+
         show_profile()
 
 
 # ── Templates ────────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def templates():
@@ -411,6 +459,7 @@ def templates():
 def templates_list():
     """List all saved templates."""
     from .templates import list_templates
+
     list_templates()
 
 
@@ -420,6 +469,7 @@ def templates_list():
 def templates_create(name, body):
     """Create a new reply template."""
     from .templates import create_template
+
     create_template(name, body)
 
 
@@ -428,6 +478,7 @@ def templates_create(name, body):
 def show(name):
     """Show a template's full content."""
     from .templates import show_template
+
     show_template(name)
 
 
@@ -436,6 +487,7 @@ def show(name):
 def edit(name):
     """Edit an existing template."""
     from .templates import edit_template
+
     edit_template(name)
 
 
@@ -445,6 +497,7 @@ def edit(name):
 def templates_delete(name, yes):
     """Delete a template."""
     from .templates import delete_template
+
     delete_template(name, skip_confirm=yes)
 
 
@@ -455,10 +508,12 @@ def use(template_name, message_id):
     """Apply a template as a reply to a message."""
     client = get_authenticated_client()
     from .templates import use_template
+
     use_template(client, template_name, message_id)
 
 
 # ── Watch Mode ───────────────────────────────────────────────────────────────
+
 
 @cli.command()
 @click.option("--interval", default=60, help="Seconds between polls (default: 60).")
@@ -467,10 +522,12 @@ def watch(interval, rules_file):
     """Watch inbox and auto-apply rules continuously."""
     client = get_authenticated_client()
     from .watch import watch_inbox
+
     watch_inbox(client, interval, rules_file)
 
 
 # ── Digest ───────────────────────────────────────────────────────────────────
+
 
 @cli.command()
 @click.option("--days", default=1, help="Number of days to summarize (default: 1).")
@@ -478,24 +535,29 @@ def digest(days):
     """Show a summary digest of recent email activity."""
     client = get_authenticated_client()
     from .messages import digest_report
+
     digest_report(client, days)
 
 
 # ── Stats ────────────────────────────────────────────────────────────────────
+
 
 @cli.command()
 def stats():
     """Show account overview and message stats."""
     client = get_authenticated_client()
     from .messages import show_stats
+
     show_stats(client)
 
 
 # ── Organize (Interactive) ───────────────────────────────────────────────────
+
 
 @cli.command()
 def organize():
     """Interactive menu-driven organizer."""
     client = get_authenticated_client()
     from .interactive import interactive_menu
+
     interactive_menu(client)

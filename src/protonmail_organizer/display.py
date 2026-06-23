@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskID
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 console = Console()
@@ -110,6 +110,7 @@ def print_info(msg: str) -> None:
 
 
 # --- Helpers ---
+
 
 def _get_sender(msg: Any) -> str:
     """Extract sender display string from message dict or object."""

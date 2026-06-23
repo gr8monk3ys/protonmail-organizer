@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 from protonmail_organizer.filters import (
     _build_sieve_actions,
     _build_sieve_condition,
     compile_rules_to_sieve,
 )
 
-
 # ---------------------------------------------------------------------------
 # Condition compilation tests
 # ---------------------------------------------------------------------------
+
 
 class TestBuildSieveCondition:
     """Tests for _build_sieve_condition (individual condition types)."""
@@ -29,62 +27,48 @@ class TestBuildSieveCondition:
 
     def test_compile_sender_contains(self):
         """sender_contains condition produces address :contains 'from' test."""
-        cond_str, needs_flags, needs_mime = _build_sieve_condition(
-            {"sender_contains": "promo"}
-        )
+        cond_str, needs_flags, needs_mime = _build_sieve_condition({"sender_contains": "promo"})
         assert cond_str == 'address :contains "from" "promo"'
         assert needs_flags is False
         assert needs_mime is False
 
     def test_compile_sender_domain(self):
         """sender_domain condition produces address :matches 'from' '*@domain' test."""
-        cond_str, needs_flags, needs_mime = _build_sieve_condition(
-            {"sender_domain": "github.com"}
-        )
+        cond_str, needs_flags, needs_mime = _build_sieve_condition({"sender_domain": "github.com"})
         assert cond_str == 'address :matches "from" "*@github.com"'
         assert needs_flags is False
         assert needs_mime is False
 
     def test_compile_subject_contains(self):
         """subject_contains condition produces header :contains 'subject' test."""
-        cond_str, needs_flags, needs_mime = _build_sieve_condition(
-            {"subject_contains": "invoice"}
-        )
+        cond_str, needs_flags, needs_mime = _build_sieve_condition({"subject_contains": "invoice"})
         assert cond_str == 'header :contains "subject" "invoice"'
         assert needs_flags is False
         assert needs_mime is False
 
     def test_compile_has_attachment(self):
         """has_attachment=True produces MIME extension test for Content-Disposition."""
-        cond_str, needs_flags, needs_mime = _build_sieve_condition(
-            {"has_attachment": True}
-        )
+        cond_str, needs_flags, needs_mime = _build_sieve_condition({"has_attachment": True})
         assert 'header :mime :anychild :type "Content-Disposition" "attachment"' in cond_str
         assert "not" not in cond_str
         assert needs_mime is True
 
     def test_compile_has_attachment_false(self):
         """has_attachment=False produces negated MIME extension test."""
-        cond_str, needs_flags, needs_mime = _build_sieve_condition(
-            {"has_attachment": False}
-        )
+        cond_str, needs_flags, needs_mime = _build_sieve_condition({"has_attachment": False})
         assert cond_str.startswith("not ")
         assert needs_mime is True
 
     def test_compile_unread(self):
         """unread=True produces hasflag test for \\Seen (negated — unread means NOT Seen)."""
-        cond_str, needs_flags, needs_mime = _build_sieve_condition(
-            {"unread": True}
-        )
+        cond_str, needs_flags, needs_mime = _build_sieve_condition({"unread": True})
         assert 'not hasflag "\\\\Seen"' == cond_str
         assert needs_flags is True
         assert needs_mime is False
 
     def test_compile_unread_false(self):
         """unread=False produces hasflag \\Seen (read messages)."""
-        cond_str, needs_flags, needs_mime = _build_sieve_condition(
-            {"unread": False}
-        )
+        cond_str, needs_flags, needs_mime = _build_sieve_condition({"unread": False})
         assert cond_str == 'hasflag "\\\\Seen"'
         assert needs_flags is True
 
@@ -109,64 +93,51 @@ class TestBuildSieveCondition:
 # Action compilation tests
 # ---------------------------------------------------------------------------
 
+
 class TestBuildSieveActions:
     """Tests for _build_sieve_actions (individual action types)."""
 
     def test_compile_move_to_action(self):
         """move_to action produces fileinto statement."""
-        lines, needs_fileinto, needs_flags = _build_sieve_actions(
-            {"move_to": "Work"}
-        )
+        lines, needs_fileinto, needs_flags = _build_sieve_actions({"move_to": "Work"})
         assert 'fileinto "Work";' in lines
         assert needs_fileinto is True
         assert needs_flags is False
 
     def test_compile_mark_read_action(self):
         """mark_read=True produces addflag \\Seen."""
-        lines, needs_fileinto, needs_flags = _build_sieve_actions(
-            {"mark_read": True}
-        )
+        lines, needs_fileinto, needs_flags = _build_sieve_actions({"mark_read": True})
         assert 'addflag "\\\\Seen";' in lines
         assert needs_flags is True
         assert needs_fileinto is False
 
     def test_compile_mark_read_false(self):
         """mark_read=False produces no action."""
-        lines, needs_fileinto, needs_flags = _build_sieve_actions(
-            {"mark_read": False}
-        )
+        lines, needs_fileinto, needs_flags = _build_sieve_actions({"mark_read": False})
         assert lines == []
 
     def test_compile_delete_action(self):
         """delete=True produces discard statement."""
-        lines, needs_fileinto, needs_flags = _build_sieve_actions(
-            {"delete": True}
-        )
+        lines, needs_fileinto, needs_flags = _build_sieve_actions({"delete": True})
         assert "discard;" in lines
         assert needs_fileinto is False
         assert needs_flags is False
 
     def test_compile_archive_action(self):
         """archive=True produces fileinto 'Archive'."""
-        lines, needs_fileinto, needs_flags = _build_sieve_actions(
-            {"archive": True}
-        )
+        lines, needs_fileinto, needs_flags = _build_sieve_actions({"archive": True})
         assert 'fileinto "Archive";' in lines
         assert needs_fileinto is True
 
     def test_compile_star_action(self):
         """star=True produces addflag \\Flagged."""
-        lines, needs_fileinto, needs_flags = _build_sieve_actions(
-            {"star": True}
-        )
+        lines, needs_fileinto, needs_flags = _build_sieve_actions({"star": True})
         assert 'addflag "\\\\Flagged";' in lines
         assert needs_flags is True
 
     def test_compile_add_label_action(self):
         """add_label action produces fileinto with the label name."""
-        lines, needs_fileinto, needs_flags = _build_sieve_actions(
-            {"add_label": "GitHub"}
-        )
+        lines, needs_fileinto, needs_flags = _build_sieve_actions({"add_label": "GitHub"})
         assert 'fileinto "GitHub";' in lines
         assert needs_fileinto is True
 
@@ -181,6 +152,7 @@ class TestBuildSieveActions:
 # ---------------------------------------------------------------------------
 # Full Sieve compilation tests
 # ---------------------------------------------------------------------------
+
 
 class TestCompileRulesToSieve:
     """Tests for compile_rules_to_sieve (end-to-end compilation)."""

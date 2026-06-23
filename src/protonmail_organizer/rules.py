@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -17,13 +16,11 @@ from .constants import (
     BATCH_DELAY_SECONDS,
     BATCH_SIZE,
     FREE_PLAN_MAX_LABELS,
-    FREE_PLAN_MAX_FOLDERS,
     INBOX,
-    LABEL_TYPE_LABEL,
     LABEL_TYPE_FOLDER,
+    LABEL_TYPE_LABEL,
     STARRED,
     SYSTEM_LABELS,
-    TRASH,
 )
 from .display import (
     console,
@@ -33,7 +30,6 @@ from .display import (
     print_success,
     print_warning,
 )
-
 
 EXAMPLE_RULES = """\
 # ProtonMail Organizer Rules
@@ -144,7 +140,7 @@ def validate_rules(
     # Get existing labels for validation
     user_labels = client.get_labels_by_type_id(LABEL_TYPE_LABEL)
     user_folders = client.get_labels_by_type_id(LABEL_TYPE_FOLDER)
-    label_names = {l.name.lower() for l in user_labels}
+    label_names = {lbl.name.lower() for lbl in user_labels}
     folder_names = {f.name.lower() for f in user_folders}
     all_names = label_names | folder_names | {v.lower() for v in SYSTEM_LABELS.values()}
 
@@ -166,8 +162,13 @@ def validate_rules(
 
         # Validate condition keys
         valid_conditions = {
-            "sender_is", "sender_contains", "sender_domain",
-            "subject_contains", "has_attachment", "older_than_days", "unread",
+            "sender_is",
+            "sender_contains",
+            "sender_domain",
+            "subject_contains",
+            "has_attachment",
+            "older_than_days",
+            "unread",
         }
         for key in conditions:
             if key not in valid_conditions:
@@ -176,8 +177,13 @@ def validate_rules(
 
         # Validate action keys and label references
         valid_actions = {
-            "move_to", "add_label", "remove_label",
-            "mark_read", "delete", "archive", "star",
+            "move_to",
+            "add_label",
+            "remove_label",
+            "mark_read",
+            "delete",
+            "archive",
+            "star",
         }
         for key in actions:
             if key not in valid_actions:
@@ -252,15 +258,15 @@ def run_rules(
             continue
 
         total_matched += len(matched)
-        console.print(
-            f"\n[cyan]Rule '{name}':[/cyan] matched {len(matched)} message(s)"
-        )
+        console.print(f"\n[cyan]Rule '{name}':[/cyan] matched {len(matched)} message(s)")
 
         if dry_run:
-            console.print(message_table(
-                matched[:10],
-                title=f"[DRY RUN] Would apply: {actions}",
-            ))
+            console.print(
+                message_table(
+                    matched[:10],
+                    title=f"[DRY RUN] Would apply: {actions}",
+                )
+            )
             if len(matched) > 10:
                 console.print(f"[dim]  ...and {len(matched) - 10} more[/dim]")
             continue
@@ -337,13 +343,15 @@ def _apply_actions(
             elif action == "archive" and value:
                 _batch_operation(
                     lambda batch: client.set_label_for_messages(ARCHIVE, batch),
-                    ids, "Archiving",
+                    ids,
+                    "Archiving",
                 )
 
             elif action == "star" and value:
                 _batch_operation(
                     lambda batch: client.set_label_for_messages(STARRED, batch),
-                    ids, "Starring",
+                    ids,
+                    "Starring",
                 )
 
             elif action == "mark_read" and value:
@@ -354,7 +362,8 @@ def _apply_actions(
                 if label_id:
                     _batch_operation(
                         lambda batch, lid=label_id: client.set_label_for_messages(lid, batch),
-                        ids, f"Adding label '{value}'",
+                        ids,
+                        f"Adding label '{value}'",
                     )
 
             elif action == "remove_label":
@@ -362,7 +371,8 @@ def _apply_actions(
                 if label_id:
                     _batch_operation(
                         lambda batch, lid=label_id: client.unset_label_for_messages(lid, batch),
-                        ids, f"Removing label '{value}'",
+                        ids,
+                        f"Removing label '{value}'",
                     )
 
             elif action == "move_to":
@@ -371,11 +381,13 @@ def _apply_actions(
                     # Remove from inbox, add to target
                     _batch_operation(
                         lambda batch, lid=label_id: client.set_label_for_messages(lid, batch),
-                        ids, f"Moving to '{value}'",
+                        ids,
+                        f"Moving to '{value}'",
                     )
                     _batch_operation(
                         lambda batch: client.unset_label_for_messages(INBOX, batch),
-                        ids, "Removing from Inbox",
+                        ids,
+                        "Removing from Inbox",
                     )
 
         except Exception as e:
@@ -396,6 +408,7 @@ def _resolve_label(
     print_info(f"Creating label '{name}'...")
     try:
         from .labels import create_label
+
         result = create_label(client, name)
         if result:
             new_id = result.get("ID", "")
@@ -410,7 +423,7 @@ def _resolve_label(
 def _batch_operation(func, ids: list, description: str) -> None:
     """Run a function in batches with delay."""
     for i in range(0, len(ids), BATCH_SIZE):
-        batch = ids[i:i + BATCH_SIZE]
+        batch = ids[i : i + BATCH_SIZE]
         func(batch)
         if i + BATCH_SIZE < len(ids):
             time.sleep(BATCH_DELAY_SECONDS)
