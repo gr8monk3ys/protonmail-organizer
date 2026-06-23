@@ -1,4 +1,10 @@
-"""AI draft reply generator using Claude API with writing style matching."""
+"""AI draft reply generator with writing-style matching.
+
+Two backends are supported via PMO_AI_BACKEND:
+- "anthropic" (default): Claude via the Anthropic API (content leaves the device).
+- "local": any OpenAI-compatible server (Ollama, LM Studio, llama.cpp, vLLM, …).
+  Pointed at localhost, email content never leaves your machine.
+"""
 
 from __future__ import annotations
 
@@ -9,15 +15,67 @@ import subprocess
 import tempfile
 from datetime import datetime
 from typing import Optional
+from urllib.parse import urlparse
 
+import requests
 from rich.panel import Panel
 from rich.table import Table
 
+from . import config
 from .client_ext import ProtonMailExt
-from .config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 from .constants import INBOX
 from .display import console, print_error, print_info, print_success, print_warning
 from .style_profile import get_style_profile
+
+_ANTHROPIC_ALIASES = {"anthropic", "claude"}
+_LOCAL_ALIASES = {"local", "openai", "openai-compatible", "ollama"}
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+
+
+def _resolve_backend(backend: Optional[str]) -> str:
+    return (backend or config.AI_BACKEND or "anthropic").strip().lower()
+
+
+def _resolve_model(backend: str, override: Optional[str]) -> str:
+    if override:
+        return override
+    if backend in _ANTHROPIC_ALIASES:
+        return config.AI_MODEL or config.DEFAULT_ANTHROPIC_MODEL
+    return config.AI_MODEL or config.DEFAULT_LOCAL_MODEL
+
+
+def _is_local_url(url: str) -> bool:
+    """True if the URL points at this machine (so no data leaves the device)."""
+    try:
+        host = urlparse(url).hostname or ""
+    except ValueError:
+        return False
+    return host.lower() in _LOCAL_HOSTS
+
+
+def _backend_is_remote(backend: str) -> bool:
+    """Whether drafting with this backend sends email content off the device."""
+    if backend in _LOCAL_ALIASES:
+        return not _is_local_url(config.AI_BASE_URL)
+    # anthropic, and any unknown backend, are treated as remote (gate to be safe).
+    return True
+
+
+def _build_user_message(message: dict, body: str, context: Optional[str]) -> str:
+    sender = message.get("Sender", {})
+    sender_name = sender.get("Name", "") if isinstance(sender, dict) else ""
+    sender_addr = sender.get("Address", "") if isinstance(sender, dict) else ""
+    subject = message.get("Subject", "(no subject)")
+    user_msg = (
+        "Reply to this email:\n"
+        f"From: {sender_name} <{sender_addr}>\n"
+        f"Subject: {subject}\n"
+        "Body:\n"
+        f"{body}"
+    )
+    if context:
+        user_msg += f"\n\nAdditional instructions: {context}"
+    return user_msg
 
 
 def generate_draft(
@@ -26,64 +84,64 @@ def generate_draft(
     style_profile: dict,
     context: Optional[str] = None,
     model: Optional[str] = None,
+    backend: Optional[str] = None,
 ) -> str:
-    """Generate a draft reply using Claude API.
+    """Generate a draft reply via the configured AI backend.
 
     Args:
         message: The message dict being replied to (sender, subject).
         body: The plain text body of the message.
         style_profile: User's writing style profile.
         context: Optional user instructions for the reply.
-        model: Claude model ID (defaults to config.ANTHROPIC_MODEL / PMO_AI_MODEL).
+        model: Model id override (defaults to the backend's configured model).
+        backend: "anthropic" or "local" (defaults to PMO_AI_BACKEND).
 
     Returns:
-        Generated draft text.
+        Generated draft text, or "" on error or declined consent.
     """
-    api_key = ANTHROPIC_API_KEY or os.environ.get("ANTHROPIC_API_KEY", "")
+    backend = _resolve_backend(backend)
+    if backend not in _ANTHROPIC_ALIASES and backend not in _LOCAL_ALIASES:
+        print_error(
+            f"Unknown AI backend '{backend}'. Set PMO_AI_BACKEND to 'anthropic' or 'local'."
+        )
+        return ""
+
+    system_prompt = _build_system_prompt(style_profile)
+    user_msg = _build_user_message(message, body, context)
+
+    # Only ask for data-egress consent when content actually leaves the device.
+    # A local model on localhost stays private, so no acknowledgment is needed.
+    if _backend_is_remote(backend):
+        from .consent import require_ai_egress_ack
+
+        if not require_ai_egress_ack():
+            print_warning("AI reply cancelled (data-sharing not acknowledged).")
+            return ""
+
+    resolved_model = _resolve_model(backend, model)
+    if backend in _ANTHROPIC_ALIASES:
+        return _generate_anthropic(system_prompt, user_msg, resolved_model)
+    return _generate_local(system_prompt, user_msg, resolved_model)
+
+
+def _generate_anthropic(system_prompt: str, user_msg: str, model: str) -> str:
+    """Draft via the Anthropic API."""
+    api_key = config.ANTHROPIC_API_KEY or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         print_error(
-            "ANTHROPIC_API_KEY not set. Export it as an environment variable:\n"
-            "  export ANTHROPIC_API_KEY='sk-ant-...'"
+            "ANTHROPIC_API_KEY not set. Export it, or run a local model instead with "
+            "PMO_AI_BACKEND=local:\n  export ANTHROPIC_API_KEY='sk-ant-...'"
         )
         return ""
 
     try:
         import anthropic
     except ImportError:
-        print_error("anthropic package not installed. Run: pip install anthropic>=0.40.0")
+        print_error("anthropic package not installed. Run: pip install 'protonmail-organizer[ai]'")
         return ""
-
-    # The email body and style snippets are about to leave the device for the
-    # Anthropic API — require a one-time, explicit acknowledgment first.
-    from .consent import require_ai_egress_ack
-
-    if not require_ai_egress_ack():
-        print_warning("AI reply cancelled (data-sharing not acknowledged).")
-        return ""
-
-    sender = message.get("Sender", {})
-    sender_name = sender.get("Name", "") if isinstance(sender, dict) else ""
-    sender_addr = sender.get("Address", "") if isinstance(sender, dict) else ""
-    subject = message.get("Subject", "(no subject)")
-
-    # Build system prompt with style profile
-    system_prompt = _build_system_prompt(style_profile)
-
-    # Build user message
-    user_msg = f"""Reply to this email:
-From: {sender_name} <{sender_addr}>
-Subject: {subject}
-Body:
-{body}"""
-
-    if context:
-        user_msg += f"\n\nAdditional instructions: {context}"
 
     client = anthropic.Anthropic(api_key=api_key)
-    model = model or ANTHROPIC_MODEL
-
-    print_info(f"Generating draft reply ({model})...")
-
+    print_info(f"Generating draft reply (anthropic: {model})...")
     try:
         response = client.messages.create(
             model=model,
@@ -92,13 +150,46 @@ Body:
             messages=[{"role": "user", "content": user_msg}],
         )
         # Use the first text block rather than assuming content[0] is text.
-        draft = next(
+        return next(
             (block.text for block in response.content if block.type == "text"),
             "",
         )
-        return draft
     except Exception as e:
         print_error(f"Claude API error: {e}")
+        return ""
+
+
+def _generate_local(system_prompt: str, user_msg: str, model: str) -> str:
+    """Draft via an OpenAI-compatible local server (Ollama, LM Studio, …)."""
+    base_url = config.AI_BASE_URL.rstrip("/")
+    url = f"{base_url}/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    if config.AI_API_KEY:
+        headers["Authorization"] = f"Bearer {config.AI_API_KEY}"
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_msg},
+        ],
+        "max_tokens": 2048,
+        "stream": False,
+    }
+    print_info(f"Generating draft reply (local: {model} @ {base_url})...")
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as e:
+        print_error(
+            f"Local model request to {url} failed: {e}\n"
+            f"Is the server running? For Ollama: `ollama serve` and `ollama pull {model}`."
+        )
+        return ""
+    try:
+        return (data["choices"][0]["message"]["content"] or "").strip()
+    except (KeyError, IndexError, TypeError):
+        print_error(f"Unexpected response from local model at {url}: {data!r}")
         return ""
 
 
@@ -107,6 +198,7 @@ def respond_to_message(
     message_id: str,
     context: Optional[str] = None,
     model: Optional[str] = None,
+    backend: Optional[str] = None,
 ) -> None:
     """Full flow: read message, generate draft, review, optionally send."""
     # Load style profile
@@ -160,15 +252,17 @@ def respond_to_message(
     plain_body = re.sub(r"<[^>]+>", "", body)
     plain_body = plain_body.replace("&nbsp;", " ").replace("&amp;", "&")
 
-    draft = generate_draft(msg_dict, plain_body, profile, context, model)
+    draft = generate_draft(msg_dict, plain_body, profile, context, model, backend)
     if not draft:
         return
 
     # Review and send flow
-    _review_and_send(client, msg, draft, plain_body, external_id, model)
+    _review_and_send(client, msg, draft, plain_body, external_id, model, backend)
 
 
-def respond_interactive(client: ProtonMailExt, model: Optional[str] = None) -> None:
+def respond_interactive(
+    client: ProtonMailExt, model: Optional[str] = None, backend: Optional[str] = None
+) -> None:
     """Interactive mode: pick a message from inbox, then draft reply."""
     print_info("Fetching recent inbox messages...")
     messages = client.search_messages(label_id=INBOX, page_size=15)
@@ -214,7 +308,7 @@ def respond_interactive(client: ProtonMailExt, model: Optional[str] = None) -> N
         or None
     )
 
-    respond_to_message(client, msg_id, context, model)
+    respond_to_message(client, msg_id, context, model, backend)
 
 
 def _review_and_send(
@@ -224,6 +318,7 @@ def _review_and_send(
     plain_body: str = "",
     external_id: Optional[str] = None,
     model: Optional[str] = None,
+    backend: Optional[str] = None,
 ) -> None:
     """Interactive review flow: display draft, then send/draft/edit/regenerate/cancel."""
     current_draft = draft
@@ -270,7 +365,7 @@ def _review_and_send(
                 "Subject": original_msg.subject if hasattr(original_msg, "subject") else "",
             }
             new_context = console.input("[dim]New instructions? (or Enter): [/dim]").strip() or None
-            new_draft = generate_draft(msg_dict, plain_body, profile, new_context, model)
+            new_draft = generate_draft(msg_dict, plain_body, profile, new_context, model, backend)
             if new_draft:
                 current_draft = new_draft
 

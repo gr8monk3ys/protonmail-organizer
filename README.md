@@ -155,13 +155,33 @@ Replies are **threaded** onto the original conversation (the original message is
 quoted beneath your reply). At the review step you can **send** immediately or
 **save as a draft** in ProtonMail to review and send from the web/app.
 
-AI features require an Anthropic API key:
+AI replies run on one of two backends, selected with `PMO_AI_BACKEND`.
+
+**Cloud (Anthropic, default).** Highest quality, but the email content leaves
+your device (see [privacy](#what-leaves-your-device-when-you-use-ai-replies)):
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-# Optional: override the model (default: claude-opus-4-8)
-export PMO_AI_MODEL="claude-sonnet-4-6"
+export PMO_AI_MODEL="claude-sonnet-4-6"   # optional, default: claude-opus-4-8
 ```
+
+**Local (private).** Point at any OpenAI-compatible server — Ollama, LM Studio,
+llama.cpp, vLLM — so **nothing leaves your machine** and no egress acknowledgment
+is needed. With [Ollama](https://ollama.com):
+
+```bash
+ollama serve && ollama pull llama3.1
+export PMO_AI_BACKEND=local
+export PMO_AI_MODEL=llama3.1                       # optional, default: llama3.1
+export PMO_AI_BASE_URL=http://localhost:11434/v1   # optional, this is the default
+# export PMO_AI_API_KEY=...                         # only if your server needs a token
+
+pmo respond to <message_id> --backend local        # or set PMO_AI_BACKEND once
+```
+
+`--backend anthropic|local` overrides the env var per command. A local backend
+on `localhost` is treated as private; pointing `PMO_AI_BASE_URL` at a remote host
+re-enables the egress acknowledgment.
 
 ### Watch, digest & organize
 ```bash
@@ -223,17 +243,22 @@ or partially compile those rules and tell you which.
 
 ### What leaves your device when you use AI replies
 
-This matters because ProtonMail is end-to-end encrypted, but the AI features are not.
-When you run `pmo respond …`, the tool **decrypts and sends to the Anthropic API**:
+This matters because ProtonMail is end-to-end encrypted, but the cloud AI backend
+is not. With the default Anthropic backend, running `pmo respond …` **decrypts and
+sends to the Anthropic API**:
 
 - the **full body of the email you are replying to** (HTML stripped to plain text), and
 - **truncated snippets** of your sent mail (first ~3 sentences, capped at 200 chars)
   that make up your writing-style profile.
 
-Do not use the AI features on confidential mail you do not want shared with a
+Do not use the cloud backend on confidential mail you do not want shared with a
 third-party provider. Delete `style_profile.json` to remove the stored snippets.
 Everything else (`pmo messages`, `rules`, `cleanup`, `filters`, …) stays between
 your machine and ProtonMail.
+
+**To keep AI replies fully on-device, use a local model** (`PMO_AI_BACKEND=local`) —
+see [AI replies & templates](#ai-replies--templates). Nothing is sent off your
+machine, and the egress acknowledgment is skipped automatically.
 
 ### Risk acknowledgments
 

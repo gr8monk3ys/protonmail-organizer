@@ -413,26 +413,36 @@ def respond():
     pass
 
 
+_BACKEND_OPTION = click.option(
+    "--backend",
+    type=click.Choice(["anthropic", "local"]),
+    default=None,
+    help="AI backend (default: PMO_AI_BACKEND). 'local' uses an OpenAI-compatible server.",
+)
+
+
 @respond.command(name="to")
 @click.argument("message_id")
 @click.option("--context", "-c", default=None, help="Instructions for the reply.")
-@click.option("--model", default=None, help="Claude model override (default: PMO_AI_MODEL).")
-def respond_to(message_id, context, model):
+@click.option("--model", default=None, help="Model override (default: PMO_AI_MODEL).")
+@_BACKEND_OPTION
+def respond_to(message_id, context, model, backend):
     """Generate a draft reply for a specific message."""
     client = get_authenticated_client()
     from .responder import respond_to_message
 
-    respond_to_message(client, message_id, context, model)
+    respond_to_message(client, message_id, context, model, backend)
 
 
 @respond.command(name="interactive")
-@click.option("--model", default=None, help="Claude model override (default: PMO_AI_MODEL).")
-def respond_interactive(model):
+@click.option("--model", default=None, help="Model override (default: PMO_AI_MODEL).")
+@_BACKEND_OPTION
+def respond_interactive(model, backend):
     """Pick a message from inbox, then draft a reply."""
     client = get_authenticated_client()
     from .responder import respond_interactive as _respond_interactive
 
-    _respond_interactive(client, model)
+    _respond_interactive(client, model, backend)
 
 
 @respond.command()
