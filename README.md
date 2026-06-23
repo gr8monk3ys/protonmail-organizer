@@ -84,11 +84,21 @@ pmo labels delete <label_id>
 
 ### Cleanup
 ```bash
-pmo cleanup old --days 90 --dry-run        # delete mail older than 90 days
+pmo cleanup old --days 90 --dry-run        # move mail older than 90 days to Trash
+pmo cleanup old --days 90 --permanent      # ...or delete it permanently
 pmo cleanup sender --pattern "marketing@"  # archive everything from a sender
 pmo cleanup newsletters                    # detect newsletters (add --delete to remove)
-pmo cleanup empty-trash --spam             # empty Trash (and Spam)
+pmo cleanup empty-trash --spam             # empty Trash (and Spam) — permanent
 pmo cleanup unsubscribe                     # list one-click unsubscribe links
+```
+
+Bulk `cleanup old` / `cleanup newsletters` move messages to **Trash** by default
+(recoverable) rather than deleting permanently. Every bulk archive/trash is logged
+and reversible:
+
+```bash
+pmo undo            # reverse the most recent archive / move-to-Trash
+pmo undo --list     # show the recent operation history
 ```
 
 ### Rules

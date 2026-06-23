@@ -198,12 +198,13 @@ def cleanup():
 @click.option("--days", required=True, type=int, help="Delete messages older than N days.")
 @click.option("--folder", default=INBOX, help="Folder to clean (default: Inbox).")
 @click.option("--dry-run", is_flag=True, help="Preview without deleting.")
-def old(days, folder, dry_run):
-    """Delete messages older than N days."""
+@click.option("--permanent", is_flag=True, help="Permanently delete instead of moving to Trash.")
+def old(days, folder, dry_run, permanent):
+    """Move messages older than N days to Trash (or --permanent)."""
     client = get_authenticated_client()
     from .cleanup import delete_old_messages
 
-    delete_old_messages(client, days, folder, dry_run)
+    delete_old_messages(client, days, folder, dry_run, permanent)
 
 
 @cleanup.command()
@@ -219,13 +220,14 @@ def sender(pattern, dry_run):
 
 @cleanup.command()
 @click.option("--dry-run", is_flag=True, help="Preview without acting.")
-@click.option("--delete", "do_delete", is_flag=True, help="Delete instead of just listing.")
-def newsletters(dry_run, do_delete):
-    """Detect and optionally delete newsletter messages."""
+@click.option("--delete", "do_delete", is_flag=True, help="Remove instead of just listing.")
+@click.option("--permanent", is_flag=True, help="Permanently delete instead of moving to Trash.")
+def newsletters(dry_run, do_delete, permanent):
+    """Detect and optionally remove newsletter messages (to Trash by default)."""
     client = get_authenticated_client()
     from .cleanup import handle_newsletters
 
-    handle_newsletters(client, dry_run, do_delete)
+    handle_newsletters(client, dry_run, do_delete, permanent)
 
 
 @cleanup.command(name="empty-trash")
@@ -513,6 +515,24 @@ def use(template_name, message_id):
     from .templates import use_template
 
     use_template(client, template_name, message_id)
+
+
+# ── Undo ─────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.option("--list", "show_list", is_flag=True, help="Show the operation history instead.")
+def undo(show_list):
+    """Reverse the most recent bulk cleanup operation (archive / move-to-Trash)."""
+    if show_list:
+        from .oplog import list_operations
+
+        list_operations()
+        return
+    client = get_authenticated_client()
+    from .oplog import undo_last
+
+    undo_last(client)
 
 
 # ── Watch Mode ───────────────────────────────────────────────────────────────
