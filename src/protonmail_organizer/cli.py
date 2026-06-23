@@ -413,21 +413,23 @@ def respond():
 @respond.command(name="to")
 @click.argument("message_id")
 @click.option("--context", "-c", default=None, help="Instructions for the reply.")
-def respond_to(message_id, context):
+@click.option("--model", default=None, help="Claude model override (default: PMO_AI_MODEL).")
+def respond_to(message_id, context, model):
     """Generate a draft reply for a specific message."""
     client = get_authenticated_client()
     from .responder import respond_to_message
 
-    respond_to_message(client, message_id, context)
+    respond_to_message(client, message_id, context, model)
 
 
 @respond.command(name="interactive")
-def respond_interactive():
+@click.option("--model", default=None, help="Claude model override (default: PMO_AI_MODEL).")
+def respond_interactive(model):
     """Pick a message from inbox, then draft a reply."""
     client = get_authenticated_client()
     from .responder import respond_interactive as _respond_interactive
 
-    _respond_interactive(client)
+    _respond_interactive(client, model)
 
 
 @respond.command()

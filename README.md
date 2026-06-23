@@ -113,19 +113,26 @@ pmo filters delete <id>      # remove a filter (or --all)
 
 ### AI replies & templates
 ```bash
-pmo respond profile --refresh    # analyze your sent mail to learn your style
-pmo respond to <message_id>      # draft a reply (review → send/edit/regenerate)
-pmo respond interactive          # pick a message from the inbox, then draft
+pmo respond profile --refresh         # analyze your sent mail to learn your style
+pmo respond to <message_id>           # draft a reply (review → send/draft/edit/regenerate)
+pmo respond to <message_id> --model claude-sonnet-4-6
+pmo respond interactive               # pick a message from the inbox, then draft
 
 pmo templates create thanks
 pmo templates list
 pmo templates use thanks <message_id>
 ```
 
+Replies are **threaded** onto the original conversation (the original message is
+quoted beneath your reply). At the review step you can **send** immediately or
+**save as a draft** in ProtonMail to review and send from the web/app.
+
 AI features require an Anthropic API key:
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
+# Optional: override the model (default: claude-opus-4-8)
+export PMO_AI_MODEL="claude-sonnet-4-6"
 ```
 
 ### Watch, digest & organize

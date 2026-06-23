@@ -8,6 +8,7 @@ when a template is applied to a message.
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -423,13 +424,21 @@ def _send_template_reply(
 
     recipient_addr = sender.address
 
+    # Thread the reply onto the original conversation via its Message-ID, and
+    # render the plain-text template as HTML so newlines survive (ProtonMail
+    # stores bodies as HTML).
+    extra = getattr(original_msg, "extra", None)
+    in_reply_to = extra.get("ExternalID") if isinstance(extra, dict) else None
+    body_html = html.escape(draft_body).replace("\n", "<br>\n")
+
     try:
         from protonmail import ProtonMail
 
         message = ProtonMail.create_message(
             recipients=[recipient_addr],
             subject=subject,
-            body=draft_body,
+            body=body_html,
+            in_reply_to=in_reply_to,
         )
         client.send_message(message)
         print_success(f"Reply sent to {recipient_addr}")

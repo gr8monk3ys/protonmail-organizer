@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import html
 import os
 import re
 import subprocess
 import tempfile
+from datetime import datetime
 from typing import Optional
 
 from rich.panel import Panel
 from rich.table import Table
 
 from .client_ext import ProtonMailExt
-from .config import ANTHROPIC_API_KEY
+from .config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 from .constants import INBOX
 from .display import console, print_error, print_info, print_success, print_warning
 from .style_profile import get_style_profile
@@ -23,6 +25,7 @@ def generate_draft(
     body: str,
     style_profile: dict,
     context: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> str:
     """Generate a draft reply using Claude API.
 
@@ -31,6 +34,7 @@ def generate_draft(
         body: The plain text body of the message.
         style_profile: User's writing style profile.
         context: Optional user instructions for the reply.
+        model: Claude model ID (defaults to config.ANTHROPIC_MODEL / PMO_AI_MODEL).
 
     Returns:
         Generated draft text.
@@ -68,17 +72,22 @@ Body:
         user_msg += f"\n\nAdditional instructions: {context}"
 
     client = anthropic.Anthropic(api_key=api_key)
+    model = model or ANTHROPIC_MODEL
 
-    print_info("Generating draft reply...")
+    print_info(f"Generating draft reply ({model})...")
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-5-20250929",
-            max_tokens=1024,
+            model=model,
+            max_tokens=2048,
             system=system_prompt,
             messages=[{"role": "user", "content": user_msg}],
         )
-        draft = response.content[0].text
+        # Use the first text block rather than assuming content[0] is text.
+        draft = next(
+            (block.text for block in response.content if block.type == "text"),
+            "",
+        )
         return draft
     except Exception as e:
         print_error(f"Claude API error: {e}")
@@ -86,7 +95,10 @@ Body:
 
 
 def respond_to_message(
-    client: ProtonMailExt, message_id: str, context: Optional[str] = None
+    client: ProtonMailExt,
+    message_id: str,
+    context: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> None:
     """Full flow: read message, generate draft, review, optionally send."""
     # Load style profile
@@ -112,6 +124,10 @@ def respond_to_message(
     sender_str = f"{sender.name} <{sender.address}>" if sender else "?"
     subject = msg.subject if hasattr(msg, "subject") else ""
 
+    # The original message's Message-ID header (ExternalID) lets us thread the
+    # reply. The library populates `extra` with the raw API dict.
+    external_id = _extract_external_id(msg)
+
     # Show original message
     console.print(
         Panel(
@@ -136,15 +152,15 @@ def respond_to_message(
     plain_body = re.sub(r"<[^>]+>", "", body)
     plain_body = plain_body.replace("&nbsp;", " ").replace("&amp;", "&")
 
-    draft = generate_draft(msg_dict, plain_body, profile, context)
+    draft = generate_draft(msg_dict, plain_body, profile, context, model)
     if not draft:
         return
 
     # Review and send flow
-    _review_and_send(client, msg, draft)
+    _review_and_send(client, msg, draft, plain_body, external_id, model)
 
 
-def respond_interactive(client: ProtonMailExt) -> None:
+def respond_interactive(client: ProtonMailExt, model: Optional[str] = None) -> None:
     """Interactive mode: pick a message from inbox, then draft reply."""
     print_info("Fetching recent inbox messages...")
     messages = client.search_messages(label_id=INBOX, page_size=15)
@@ -190,11 +206,18 @@ def respond_interactive(client: ProtonMailExt) -> None:
         or None
     )
 
-    respond_to_message(client, msg_id, context)
+    respond_to_message(client, msg_id, context, model)
 
 
-def _review_and_send(client: ProtonMailExt, original_msg, draft: str) -> None:
-    """Interactive review flow: display draft, then send/edit/regenerate/cancel."""
+def _review_and_send(
+    client: ProtonMailExt,
+    original_msg,
+    draft: str,
+    plain_body: str = "",
+    external_id: Optional[str] = None,
+    model: Optional[str] = None,
+) -> None:
+    """Interactive review flow: display draft, then send/draft/edit/regenerate/cancel."""
     current_draft = draft
 
     while True:
@@ -208,6 +231,7 @@ def _review_and_send(client: ProtonMailExt, original_msg, draft: str) -> None:
 
         console.print(
             "[bold][S][/bold]end  "
+            "save as [bold][D][/bold]raft  "
             "[bold][E][/bold]dit  "
             "[bold][R][/bold]egenerate  "
             "[bold][C][/bold]ancel"
@@ -215,7 +239,11 @@ def _review_and_send(client: ProtonMailExt, original_msg, draft: str) -> None:
         action = console.input("[bold]Action: [/bold]").strip().lower()
 
         if action in ("s", "send"):
-            _send_reply(client, original_msg, current_draft)
+            _send_reply(client, original_msg, current_draft, plain_body, external_id)
+            break
+
+        elif action in ("d", "draft"):
+            _save_draft(client, original_msg, current_draft, plain_body, external_id)
             break
 
         elif action in ("e", "edit"):
@@ -225,8 +253,6 @@ def _review_and_send(client: ProtonMailExt, original_msg, draft: str) -> None:
 
         elif action in ("r", "regenerate"):
             profile = get_style_profile()
-            body = original_msg.body if hasattr(original_msg, "body") else ""
-            plain_body = re.sub(r"<[^>]+>", "", body)
             sender = getattr(original_msg, "sender", None)
             msg_dict = {
                 "Sender": {
@@ -236,7 +262,7 @@ def _review_and_send(client: ProtonMailExt, original_msg, draft: str) -> None:
                 "Subject": original_msg.subject if hasattr(original_msg, "subject") else "",
             }
             new_context = console.input("[dim]New instructions? (or Enter): [/dim]").strip() or None
-            new_draft = generate_draft(msg_dict, plain_body, profile, new_context)
+            new_draft = generate_draft(msg_dict, plain_body, profile, new_context, model)
             if new_draft:
                 current_draft = new_draft
 
@@ -245,33 +271,69 @@ def _review_and_send(client: ProtonMailExt, original_msg, draft: str) -> None:
             break
 
         else:
-            print_warning("Unknown action. Use S/E/R/C.")
+            print_warning("Unknown action. Use S/D/E/R/C.")
 
 
-def _send_reply(client: ProtonMailExt, original_msg, draft_body: str) -> None:
-    """Send the draft as a reply to the original message."""
+def _build_reply_message(client: ProtonMailExt, original_msg, draft_body: str, plain_body: str):
+    """Build a threaded reply Message (quoted original, In-Reply-To set).
+
+    Returns the protonmail Message, or None if the recipient can't be determined.
+    """
     sender = getattr(original_msg, "sender", None)
     if not sender:
         print_error("Cannot determine recipient from original message.")
-        return
+        return None
 
-    recipient_addr = sender.address
     subject = original_msg.subject if hasattr(original_msg, "subject") else ""
     if not subject.lower().startswith("re:"):
         subject = f"Re: {subject}"
 
-    try:
-        from protonmail import ProtonMail
+    from protonmail import ProtonMail
 
-        message = ProtonMail.create_message(
-            recipients=[recipient_addr],
-            subject=subject,
-            body=draft_body,
-        )
+    return ProtonMail.create_message(
+        recipients=[sender.address],
+        subject=subject,
+        body=_format_reply_html(draft_body, original_msg, plain_body),
+        # in_reply_to threads the reply onto the original conversation; the
+        # library resolves the parent message by this Message-ID.
+        in_reply_to=_extract_external_id(original_msg),
+    )
+
+
+def _send_reply(
+    client: ProtonMailExt,
+    original_msg,
+    draft_body: str,
+    plain_body: str = "",
+    external_id: Optional[str] = None,
+) -> None:
+    """Send the draft as a threaded reply to the original message."""
+    message = _build_reply_message(client, original_msg, draft_body, plain_body)
+    if message is None:
+        return
+    try:
         client.send_message(message)
-        print_success(f"Reply sent to {recipient_addr}")
+        print_success(f"Reply sent to {message.recipients[0].address}")
     except Exception as e:
         print_error(f"Failed to send reply: {e}")
+
+
+def _save_draft(
+    client: ProtonMailExt,
+    original_msg,
+    draft_body: str,
+    plain_body: str = "",
+    external_id: Optional[str] = None,
+) -> None:
+    """Save the reply as a draft in ProtonMail instead of sending it."""
+    message = _build_reply_message(client, original_msg, draft_body, plain_body)
+    if message is None:
+        return
+    try:
+        client.create_draft(message)
+        print_success("Draft saved to ProtonMail. Review and send it from the web/app.")
+    except Exception as e:
+        print_error(f"Failed to save draft: {e}")
 
 
 def _edit_draft(draft: str) -> Optional[str]:
@@ -354,6 +416,43 @@ Rules:
             prompt += f"\n\nExample {i}:\n{truncated}"
 
     return prompt
+
+
+def _extract_external_id(original_msg) -> Optional[str]:
+    """Return the original message's Message-ID (ExternalID), if available."""
+    extra = getattr(original_msg, "extra", None)
+    if isinstance(extra, dict):
+        return extra.get("ExternalID")
+    return None
+
+
+def _format_reply_html(draft_body: str, original_msg, plain_body: str) -> str:
+    """Render the reply as HTML with the original message quoted beneath it.
+
+    ProtonMail stores message bodies as HTML, so plain-text drafts need their
+    newlines converted to <br> to render correctly.
+    """
+    draft_html = html.escape(draft_body).replace("\n", "<br>\n")
+
+    sender = getattr(original_msg, "sender", None)
+    if sender:
+        who = f"{sender.name} <{sender.address}>" if getattr(sender, "name", "") else sender.address
+    else:
+        who = "the sender"
+
+    msg_time = getattr(original_msg, "time", 0)
+    when = datetime.fromtimestamp(msg_time).strftime("%a, %d %b %Y at %H:%M") if msg_time else ""
+    attribution = f"On {when}, {who} wrote:" if when else f"{who} wrote:"
+
+    quoted = html.escape(_truncate(plain_body.strip(), 5000)).replace("\n", "<br>\n")
+
+    return (
+        f"{draft_html}<br><br>"
+        f"{html.escape(attribution)}<br>"
+        f'<blockquote type="cite" '
+        f'style="margin:0 0 0 0.8ex; border-left:2px solid #ccc; padding-left:1ex;">'
+        f"{quoted}</blockquote>"
+    )
 
 
 def _truncate(text: str, max_len: int) -> str:
