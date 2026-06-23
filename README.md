@@ -201,10 +201,34 @@ or partially compile those rules and tell you which.
 ## Configuration & privacy
 
 - All state lives under `~/.config/protonmail-organizer/` (override with `PMO_CONFIG_DIR`).
-- The session file and style profile are written with `0600` permissions.
-- The writing-style profile stores only **truncated** snippets (first ~3 sentences,
-  capped at 200 chars) of your sent mail. These snippets are sent to the Claude API
-  when drafting replies. Delete `style_profile.json` to remove them.
+- The session file, style profile, and consent record are written with `0600` permissions.
+
+### What leaves your device when you use AI replies
+
+This matters because ProtonMail is end-to-end encrypted, but the AI features are not.
+When you run `pmo respond …`, the tool **decrypts and sends to the Anthropic API**:
+
+- the **full body of the email you are replying to** (HTML stripped to plain text), and
+- **truncated snippets** of your sent mail (first ~3 sentences, capped at 200 chars)
+  that make up your writing-style profile.
+
+Do not use the AI features on confidential mail you do not want shared with a
+third-party provider. Delete `style_profile.json` to remove the stored snippets.
+Everything else (`pmo messages`, `rules`, `cleanup`, `filters`, …) stays between
+your machine and ProtonMail.
+
+### Risk acknowledgments
+
+Because this is an unofficial client and AI drafting sends data off-device, the
+first time you authenticate (and the first time you draft an AI reply) you are
+asked to acknowledge the risk once. The choice is saved in `consent.json`. For
+non-interactive use (scripts, CI), set `PMO_ACCEPT_RISKS=1` to accept up front.
+
+### Troubleshooting
+
+This tool rides on a private, undocumented API that can change without notice.
+If a command fails with a short error, re-run it with `PMO_DEBUG=1` to print the
+full traceback — useful for spotting when the upstream API shape has shifted.
 
 ## Development
 

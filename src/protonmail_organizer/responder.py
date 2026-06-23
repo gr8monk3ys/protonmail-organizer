@@ -53,6 +53,14 @@ def generate_draft(
         print_error("anthropic package not installed. Run: pip install anthropic>=0.40.0")
         return ""
 
+    # The email body and style snippets are about to leave the device for the
+    # Anthropic API — require a one-time, explicit acknowledgment first.
+    from .consent import require_ai_egress_ack
+
+    if not require_ai_egress_ack():
+        print_warning("AI reply cancelled (data-sharing not acknowledged).")
+        return ""
+
     sender = message.get("Sender", {})
     sender_name = sender.get("Name", "") if isinstance(sender, dict) else ""
     sender_addr = sender.get("Address", "") if isinstance(sender, dict) else ""
