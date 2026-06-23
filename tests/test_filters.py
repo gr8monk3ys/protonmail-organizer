@@ -88,6 +88,18 @@ class TestBuildSieveCondition:
         assert needs_flags is False
         assert needs_mime is False
 
+    def test_list_value_becomes_anyof(self):
+        """A list condition value compiles to an anyof(...) Sieve test."""
+        cond_str, _, _ = _build_sieve_condition({"sender_domain": ["github.com", "gitlab.com"]})
+        assert cond_str.startswith("anyof (")
+        assert 'address :matches "from" "*@github.com"' in cond_str
+        assert 'address :matches "from" "*@gitlab.com"' in cond_str
+
+    def test_quotes_in_value_are_escaped(self):
+        """Double quotes in a value are escaped, not injected into the Sieve."""
+        cond_str, _, _ = _build_sieve_condition({"subject_contains": 'say "hi"'})
+        assert r"say \"hi\"" in cond_str
+
 
 # ---------------------------------------------------------------------------
 # Action compilation tests

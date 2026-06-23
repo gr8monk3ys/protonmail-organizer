@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -166,6 +167,8 @@ def validate_rules(
             "sender_contains",
             "sender_domain",
             "subject_contains",
+            "sender_matches",
+            "subject_matches",
             "has_attachment",
             "older_than_days",
             "unread",
@@ -221,17 +224,19 @@ def run_rules(
     client: ProtonMailExt,
     rules_file: Optional[str] = None,
     dry_run: bool = False,
+    folder: str = INBOX,
 ) -> None:
-    """Run rules against inbox messages."""
+    """Run rules against the messages in a folder (default: Inbox)."""
     rules = _load_rules(rules_file)
     if not rules:
         return
 
-    print_info("Fetching inbox messages...")
-    messages = client.search_messages_all(label_id=INBOX)
+    folder_name = SYSTEM_LABELS.get(folder, folder)
+    print_info(f"Fetching {folder_name} messages...")
+    messages = client.search_messages_all(label_id=folder)
 
     if not messages:
-        print_warning("No messages in inbox.")
+        print_warning(f"No messages in {folder_name}.")
         return
 
     print_info(f"Evaluating {len(rules)} rule(s) against {len(messages)} message(s)...")
@@ -271,7 +276,7 @@ def run_rules(
                 console.print(f"[dim]  ...and {len(matched) - 10} more[/dim]")
             continue
 
-        _apply_actions(client, matched, actions, label_map)
+        _apply_actions(client, matched, actions, label_map, source_folder=folder)
 
     if total_matched == 0:
         print_info("No messages matched any rules.")
@@ -281,31 +286,53 @@ def run_rules(
         print_success(f"Applied rules to {total_matched} message(s).")
 
 
+def _as_list(value) -> list:
+    """Normalize a scalar or list condition value into a list (for OR matching)."""
+    return value if isinstance(value, list) else [value]
+
+
+def _any(value, predicate) -> bool:
+    """True if predicate matches any item of a scalar/list condition value (OR)."""
+    return any(predicate(v) for v in _as_list(value))
+
+
 def _matches_conditions(msg: dict, conditions: dict) -> bool:
-    """Check if a message matches all conditions (AND logic)."""
+    """Check if a message matches all conditions (AND across keys).
+
+    A condition value may be a scalar or a list; a list matches if ANY of its
+    values match (OR within a single condition).
+    """
     sender = msg.get("Sender", {})
     addr = sender.get("Address", "") if isinstance(sender, dict) else ""
     subject = msg.get("Subject", "")
+    domain = addr.split("@")[-1] if "@" in addr else ""
     msg_time = msg.get("Time", 0)
     unread = msg.get("Unread", 0)
     num_att = msg.get("NumAttachments", 0)
 
     for key, value in conditions.items():
         if key == "sender_is":
-            if addr.lower() != value.lower():
+            if not _any(value, lambda v: addr.lower() == str(v).lower()):
                 return False
 
         elif key == "sender_contains":
-            if value.lower() not in addr.lower():
+            if not _any(value, lambda v: str(v).lower() in addr.lower()):
                 return False
 
         elif key == "sender_domain":
-            domain = addr.split("@")[-1] if "@" in addr else ""
-            if domain.lower() != value.lower():
+            if not _any(value, lambda v: domain.lower() == str(v).lower()):
                 return False
 
         elif key == "subject_contains":
-            if value.lower() not in subject.lower():
+            if not _any(value, lambda v: str(v).lower() in subject.lower()):
+                return False
+
+        elif key == "sender_matches":
+            if not _any(value, lambda v: re.search(str(v), addr, re.IGNORECASE)):
+                return False
+
+        elif key == "subject_matches":
+            if not _any(value, lambda v: re.search(str(v), subject, re.IGNORECASE)):
                 return False
 
         elif key == "has_attachment":
@@ -331,9 +358,16 @@ def _apply_actions(
     messages: list,
     actions: dict,
     label_map: dict,
+    source_folder: str = INBOX,
 ) -> None:
-    """Apply actions to matched messages."""
+    """Apply actions to matched messages.
+
+    source_folder is the folder the messages came from; ``move_to`` removes
+    that label after filing into the target (so a move out of Archive removes
+    Archive, not Inbox).
+    """
     ids = [m.get("ID", "") for m in messages]
+    source_name = SYSTEM_LABELS.get(source_folder, "source folder")
 
     for action, value in actions.items():
         try:
@@ -378,16 +412,18 @@ def _apply_actions(
             elif action == "move_to":
                 label_id = _resolve_label(client, value, label_map)
                 if label_id:
-                    # Remove from inbox, add to target
+                    # File into the target, then remove from the source folder.
                     _batch_operation(
                         lambda batch, lid=label_id: client.set_label_for_messages(lid, batch),
                         ids,
                         f"Moving to '{value}'",
                     )
                     _batch_operation(
-                        lambda batch: client.unset_label_for_messages(INBOX, batch),
+                        lambda batch, sid=source_folder: client.unset_label_for_messages(
+                            sid, batch
+                        ),
                         ids,
-                        "Removing from Inbox",
+                        f"Removing from {source_name}",
                     )
 
         except Exception as e:

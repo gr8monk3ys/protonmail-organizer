@@ -21,7 +21,17 @@ from .display import console, print_error, print_info, print_success, print_warn
 
 # Conditions that require runtime (time-based) — can't be expressed in Sieve
 # Note: has_attachment and unread CAN be expressed in Sieve but need special handling
-_RUNTIME_ONLY_CONDITIONS = {"older_than_days"}
+_RUNTIME_ONLY_CONDITIONS = {"older_than_days", "sender_matches", "subject_matches"}
+
+
+def _sieve_quote(value) -> str:
+    """Escape a value for safe interpolation inside a Sieve double-quoted string."""
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _as_list(value) -> list:
+    """Normalize a scalar or list condition value into a list."""
+    return value if isinstance(value, list) else [value]
 
 
 def list_filters(client: ProtonMailExt) -> None:
@@ -307,18 +317,20 @@ def _build_sieve_condition(conditions: dict) -> tuple[str, bool, bool]:
     needs_imap4flags = False
     needs_mime = False
 
+    # Renderers for value-based conditions. A list value becomes an anyof(...)
+    # (OR within the condition); the outer conditions are still AND-ed.
+    renderers = {
+        "sender_is": lambda v: f'address :is "from" "{_sieve_quote(v)}"',
+        "sender_contains": lambda v: f'address :contains "from" "{_sieve_quote(v)}"',
+        "sender_domain": lambda v: f'address :matches "from" "*@{_sieve_quote(v)}"',
+        "subject_contains": lambda v: f'header :contains "subject" "{_sieve_quote(v)}"',
+    }
+
     for key, value in conditions.items():
-        if key == "sender_is":
-            tests.append(f'address :is "from" "{value}"')
-
-        elif key == "sender_contains":
-            tests.append(f'address :contains "from" "{value}"')
-
-        elif key == "sender_domain":
-            tests.append(f'address :matches "from" "*@{value}"')
-
-        elif key == "subject_contains":
-            tests.append(f'header :contains "subject" "{value}"')
+        if key in renderers:
+            render = renderers[key]
+            sub = [render(v) for v in _as_list(value)]
+            tests.append(sub[0] if len(sub) == 1 else f"anyof ({', '.join(sub)})")
 
         elif key == "has_attachment":
             # ProtonMail supports MIME extension for attachment checking

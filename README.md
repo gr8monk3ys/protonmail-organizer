@@ -166,9 +166,23 @@ rules:
 ```
 
 **Conditions:** `sender_is`, `sender_contains`, `sender_domain`, `subject_contains`,
-`has_attachment`, `older_than_days`, `unread`.
+`sender_matches` / `subject_matches` (case-insensitive regex), `has_attachment`,
+`older_than_days`, `unread`.
+
+Any text condition accepts a **list** of values, matching if *any* of them match
+(OR within the condition; conditions are still AND-ed together):
+
+```yaml
+  - name: "Label code-hosting notifications"
+    conditions:
+      sender_domain: ["github.com", "gitlab.com", "bitbucket.org"]
+    actions:
+      add_label: "Code"
+```
 
 **Actions:** `move_to`, `add_label`, `remove_label`, `mark_read`, `delete`, `archive`, `star`.
+
+Run rules against any folder, not just the inbox: `pmo rules run --folder 6` (Archive).
 
 Time-based conditions like `older_than_days` only work with `pmo rules run` /
 `pmo watch` (they can't be expressed in Sieve), so `pmo filters push` will skip

@@ -263,12 +263,13 @@ def rules():
 @rules.command(name="run")
 @click.option("--dry-run", is_flag=True, help="Show what would happen without applying.")
 @click.option("--file", "rules_file", default=None, help="Path to rules YAML.")
-def rules_run(dry_run, rules_file):
-    """Run rules against your inbox."""
+@click.option("--folder", default=INBOX, help="Folder/label ID to run against (default: Inbox).")
+def rules_run(dry_run, rules_file, folder):
+    """Run rules against a folder (default: your inbox)."""
     client = get_authenticated_client()
     from .rules import run_rules
 
-    run_rules(client, rules_file, dry_run)
+    run_rules(client, rules_file, dry_run, folder)
 
 
 @rules.command(name="list")
