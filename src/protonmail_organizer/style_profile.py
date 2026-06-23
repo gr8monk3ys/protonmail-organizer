@@ -19,7 +19,7 @@ from rich.table import Table
 from .client_ext import ProtonMailExt
 from .config import STYLE_PROFILE_FILE, ensure_config_dir
 from .constants import ALL_SENT
-from .display import console, print_info, print_success, print_warning
+from .display import console, debug_enabled, print_info, print_success, print_warning
 
 
 def build_style_profile(client: ProtonMailExt, sample_count: int = 50) -> dict:
@@ -58,7 +58,10 @@ def build_style_profile(client: ProtonMailExt, sample_count: int = 50) -> dict:
         try:
             msg = client.read_message(msg_id)
             body = msg.body if hasattr(msg, "body") and msg.body else ""
-        except Exception:
+        except Exception as e:
+            # Skipping a single unreadable message is fine, but don't hide why.
+            if debug_enabled():
+                console.print(f"[dim]skipped sent message {msg_id}: {e}[/dim]")
             continue
 
         if not body:

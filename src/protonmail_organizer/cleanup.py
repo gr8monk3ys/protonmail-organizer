@@ -18,6 +18,7 @@ from .constants import (
 from .display import (
     confirm_action,
     console,
+    debug_enabled,
     message_table,
     print_error,
     print_info,
@@ -303,7 +304,10 @@ def find_unsubscribe_links(client: ProtonMailExt, limit: int = 50) -> None:
         # Get full message to check headers
         try:
             full_msg = client.get_message(msg_id)
-        except Exception:
+        except Exception as e:
+            # One bad message shouldn't abort the scan, but surface it on demand.
+            if debug_enabled():
+                console.print(f"[dim]skipped message {msg_id}: {e}[/dim]")
             continue
 
         # Check parsed headers for List-Unsubscribe

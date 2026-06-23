@@ -73,8 +73,13 @@ class TestSearch:
         c = make_client()
         c._get.return_value.json.return_value = {"Messages": [{"ID": "m1"}]}
         out = c.search_messages(
-            keyword="invoice", sender="a@b.com", recipient="c@d.com",
-            begin=100, end=200, has_attachments=True, label_id="0",
+            keyword="invoice",
+            sender="a@b.com",
+            recipient="c@d.com",
+            begin=100,
+            end=200,
+            has_attachments=True,
+            label_id="0",
         )
         endpoint = c._get.call_args.args
         assert endpoint == (BASE, "mail/v4/messages")
