@@ -20,6 +20,24 @@ filters, detect newsletters, draft AI replies in your own writing style, and mor
 - **Templates** — reusable reply templates with `{sender_first}`, `{subject}`, and other placeholders.
 - **Insights** — account stats, top senders, a daily digest of who's waiting on you, and rule-coverage analytics.
 
+### Experimental features
+
+Some surface area is wider than it is battle-tested. The following are usable but
+**experimental** — expect rough edges, and prefer `--dry-run` where available:
+
+- **Writing-style profile** (`pmo respond profile`) — heuristic analysis of your sent mail.
+- **Rule analytics** (`pmo rules stats` / `pmo rules suggest`).
+- **Templates** (`pmo templates …`).
+
+The dependable core is `messages`, `labels`, `rules run`, `cleanup`, and `filters`.
+
+## Project status
+
+This is a single-author, pre-1.0 tool. To be clear about what the badges *don't*
+say: there are no third-party security or "scorecard" badges here, and CI is
+deliberately simple — it installs the package and runs `ruff` + `pytest` on
+Python 3.9 and 3.12. That is the only quality signal the repo claims.
+
 ## Install
 
 Requires Python 3.9+.

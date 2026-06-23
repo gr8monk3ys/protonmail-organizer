@@ -305,7 +305,7 @@ def init():
 @click.option("--file", "rules_file", default=None, help="Path to rules YAML.")
 @click.option("--limit", default=200, help="Max messages to scan.")
 def rules_stats(rules_file, limit):
-    """Show rule coverage stats and unmatched senders."""
+    """Show rule coverage stats and unmatched senders. (experimental)"""
     client = get_authenticated_client()
     from .rule_analytics import rule_stats
 
@@ -316,7 +316,7 @@ def rules_stats(rules_file, limit):
 @click.option("--file", "rules_file", default=None, help="Path to rules YAML.")
 @click.option("--limit", default=200, help="Max messages to scan.")
 def suggest(rules_file, limit):
-    """Suggest new rules based on unmatched messages."""
+    """Suggest new rules based on unmatched messages. (experimental)"""
     client = get_authenticated_client()
     from .rule_analytics import suggest_rules
 
@@ -439,7 +439,7 @@ def respond_interactive(model):
 @click.option("--refresh", is_flag=True, help="Re-analyze sent emails and rebuild profile.")
 @click.option("--samples", default=50, help="Number of sent emails to analyze.")
 def profile(refresh, samples):
-    """Show or rebuild your writing style profile."""
+    """Show or rebuild your writing style profile. (experimental)"""
     if refresh:
         client = get_authenticated_client()
         from .style_profile import refresh_profile
@@ -456,7 +456,7 @@ def profile(refresh, samples):
 
 @cli.group()
 def templates():
-    """Reusable email reply templates."""
+    """Reusable email reply templates. (experimental)"""
     pass
 
 
