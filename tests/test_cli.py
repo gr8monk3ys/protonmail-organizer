@@ -104,3 +104,33 @@ class TestSubcommandHelp:
         """pmo respond profile --help exits 0."""
         result = runner.invoke(cli, ["respond", "profile", "--help"])
         assert result.exit_code == 0
+
+
+class TestCLIGuards:
+    """Behavior tests: input-validation guards must short-circuit before auth."""
+
+    def _no_auth(self, monkeypatch):
+        """Make get_authenticated_client explode so we can prove it isn't reached."""
+
+        def _boom(*args, **kwargs):
+            raise AssertionError("get_authenticated_client should not be called")
+
+        monkeypatch.setattr("protonmail_organizer.cli.get_authenticated_client", _boom)
+
+    def test_labels_apply_without_messages_errors_without_auth(self, monkeypatch):
+        self._no_auth(monkeypatch)
+        result = runner.invoke(cli, ["labels", "apply", "L1"])
+        assert result.exit_code == 0
+        assert "at least one" in result.output.lower()
+
+    def test_filters_delete_without_id_or_all_errors_without_auth(self, monkeypatch):
+        self._no_auth(monkeypatch)
+        result = runner.invoke(cli, ["filters", "delete"])
+        assert result.exit_code == 0
+        assert "filter id" in result.output.lower() or "--all" in result.output
+
+    def test_cleanup_old_requires_days(self):
+        """Missing required --days is a usage error (exit 2), no network touched."""
+        result = runner.invoke(cli, ["cleanup", "old"])
+        assert result.exit_code == 2
+        assert "days" in result.output.lower()

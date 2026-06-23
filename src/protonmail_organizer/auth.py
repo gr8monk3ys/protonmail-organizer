@@ -11,6 +11,7 @@ from rich.console import Console
 
 from .client_ext import ProtonMailExt
 from .config import SESSION_FILE, ensure_config_dir
+from .consent import require_unofficial_use_ack
 
 console = Console()
 
@@ -21,6 +22,10 @@ def get_authenticated_client(require_auth: bool = True) -> Optional[ProtonMailEx
     Tries to load a saved session first. If no session exists and
     require_auth is True, prompts for interactive login.
     """
+    # Gate any account access behind a one-time unofficial-use acknowledgment.
+    if not require_unofficial_use_ack():
+        sys.exit(1)
+
     client = ProtonMailExt()
 
     # Try loading saved session
@@ -40,6 +45,10 @@ def get_authenticated_client(require_auth: bool = True) -> Optional[ProtonMailEx
 
 def interactive_login(client: Optional[ProtonMailExt] = None) -> ProtonMailExt:
     """Prompt for credentials and log in."""
+    # Direct `pmo auth login` path: acknowledge unofficial use before logging in.
+    if not require_unofficial_use_ack():
+        sys.exit(1)
+
     if client is None:
         client = ProtonMailExt()
 

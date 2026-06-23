@@ -20,6 +20,24 @@ filters, detect newsletters, draft AI replies in your own writing style, and mor
 - **Templates** — reusable reply templates with `{sender_first}`, `{subject}`, and other placeholders.
 - **Insights** — account stats, top senders, a daily digest of who's waiting on you, and rule-coverage analytics.
 
+### Experimental features
+
+Some surface area is wider than it is battle-tested. The following are usable but
+**experimental** — expect rough edges, and prefer `--dry-run` where available:
+
+- **Writing-style profile** (`pmo respond profile`) — heuristic analysis of your sent mail.
+- **Rule analytics** (`pmo rules stats` / `pmo rules suggest`).
+- **Templates** (`pmo templates …`).
+
+The dependable core is `messages`, `labels`, `rules run`, `cleanup`, and `filters`.
+
+## Project status
+
+This is a single-author, pre-1.0 tool. To be clear about what the badges *don't*
+say: there are no third-party security or "scorecard" badges here, and CI is
+deliberately simple — it installs the package and runs `ruff` + `pytest` on
+Python 3.9 and 3.12. That is the only quality signal the repo claims.
+
 ## Install
 
 Requires Python 3.9+.
@@ -137,13 +155,33 @@ Replies are **threaded** onto the original conversation (the original message is
 quoted beneath your reply). At the review step you can **send** immediately or
 **save as a draft** in ProtonMail to review and send from the web/app.
 
-AI features require an Anthropic API key:
+AI replies run on one of two backends, selected with `PMO_AI_BACKEND`.
+
+**Cloud (Anthropic, default).** Highest quality, but the email content leaves
+your device (see [privacy](#what-leaves-your-device-when-you-use-ai-replies)):
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-# Optional: override the model (default: claude-opus-4-8)
-export PMO_AI_MODEL="claude-sonnet-4-6"
+export PMO_AI_MODEL="claude-sonnet-4-6"   # optional, default: claude-opus-4-8
 ```
+
+**Local (private).** Point at any OpenAI-compatible server — Ollama, LM Studio,
+llama.cpp, vLLM — so **nothing leaves your machine** and no egress acknowledgment
+is needed. With [Ollama](https://ollama.com):
+
+```bash
+ollama serve && ollama pull llama3.1
+export PMO_AI_BACKEND=local
+export PMO_AI_MODEL=llama3.1                       # optional, default: llama3.1
+export PMO_AI_BASE_URL=http://localhost:11434/v1   # optional, this is the default
+# export PMO_AI_API_KEY=...                         # only if your server needs a token
+
+pmo respond to <message_id> --backend local        # or set PMO_AI_BACKEND once
+```
+
+`--backend anthropic|local` overrides the env var per command. A local backend
+on `localhost` is treated as private; pointing `PMO_AI_BASE_URL` at a remote host
+re-enables the egress acknowledgment.
 
 ### Watch, digest & organize
 ```bash
@@ -201,10 +239,39 @@ or partially compile those rules and tell you which.
 ## Configuration & privacy
 
 - All state lives under `~/.config/protonmail-organizer/` (override with `PMO_CONFIG_DIR`).
-- The session file and style profile are written with `0600` permissions.
-- The writing-style profile stores only **truncated** snippets (first ~3 sentences,
-  capped at 200 chars) of your sent mail. These snippets are sent to the Claude API
-  when drafting replies. Delete `style_profile.json` to remove them.
+- The session file, style profile, and consent record are written with `0600` permissions.
+
+### What leaves your device when you use AI replies
+
+This matters because ProtonMail is end-to-end encrypted, but the cloud AI backend
+is not. With the default Anthropic backend, running `pmo respond …` **decrypts and
+sends to the Anthropic API**:
+
+- the **full body of the email you are replying to** (HTML stripped to plain text), and
+- **truncated snippets** of your sent mail (first ~3 sentences, capped at 200 chars)
+  that make up your writing-style profile.
+
+Do not use the cloud backend on confidential mail you do not want shared with a
+third-party provider. Delete `style_profile.json` to remove the stored snippets.
+Everything else (`pmo messages`, `rules`, `cleanup`, `filters`, …) stays between
+your machine and ProtonMail.
+
+**To keep AI replies fully on-device, use a local model** (`PMO_AI_BACKEND=local`) —
+see [AI replies & templates](#ai-replies--templates). Nothing is sent off your
+machine, and the egress acknowledgment is skipped automatically.
+
+### Risk acknowledgments
+
+Because this is an unofficial client and AI drafting sends data off-device, the
+first time you authenticate (and the first time you draft an AI reply) you are
+asked to acknowledge the risk once. The choice is saved in `consent.json`. For
+non-interactive use (scripts, CI), set `PMO_ACCEPT_RISKS=1` to accept up front.
+
+### Troubleshooting
+
+This tool rides on a private, undocumented API that can change without notice.
+If a command fails with a short error, re-run it with `PMO_DEBUG=1` to print the
+full traceback — useful for spotting when the upstream API shape has shifted.
 
 ## Development
 

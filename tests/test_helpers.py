@@ -6,7 +6,12 @@ import time
 from datetime import datetime
 from types import SimpleNamespace
 
-from protonmail_organizer.display import _format_time, _get_field, _get_sender
+from protonmail_organizer.display import (
+    _format_time,
+    _get_field,
+    _get_sender,
+    debug_enabled,
+)
 from protonmail_organizer.rule_analytics import _extract_domain, _extract_sender
 from protonmail_organizer.templates import _validate_name
 
@@ -65,6 +70,20 @@ class TestExtractSenderDomain:
 
     def test_extract_domain_no_at(self):
         assert _extract_domain("not-an-email") == ""
+
+
+class TestDebugEnabled:
+    def test_off_by_default(self, monkeypatch):
+        monkeypatch.delenv("PMO_DEBUG", raising=False)
+        assert debug_enabled() is False
+
+    def test_on_when_set_to_one(self, monkeypatch):
+        monkeypatch.setenv("PMO_DEBUG", "1")
+        assert debug_enabled() is True
+
+    def test_off_for_other_values(self, monkeypatch):
+        monkeypatch.setenv("PMO_DEBUG", "true")
+        assert debug_enabled() is False
 
 
 class TestValidateTemplateName:

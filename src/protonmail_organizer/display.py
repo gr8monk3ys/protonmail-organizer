@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from datetime import datetime
 from typing import Any
 
@@ -11,6 +13,15 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 console = Console()
+
+
+def debug_enabled() -> bool:
+    """True when PMO_DEBUG=1.
+
+    Enables verbose tracebacks, which are the quickest way to spot when the
+    unofficial upstream API has changed shape underneath us.
+    """
+    return os.environ.get("PMO_DEBUG") == "1"
 
 
 def message_table(messages: list, title: str = "Messages") -> Table:
@@ -103,6 +114,10 @@ def print_warning(msg: str) -> None:
 
 def print_error(msg: str) -> None:
     console.print(f"[red]{msg}[/red]")
+    # If we're handling an exception and the user opted into PMO_DEBUG, show the
+    # full traceback so an opaque "Failed to ...: <msg>" can be diagnosed.
+    if debug_enabled() and sys.exc_info()[0] is not None:
+        console.print_exception()
 
 
 def print_info(msg: str) -> None:

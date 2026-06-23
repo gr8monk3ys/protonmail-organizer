@@ -17,7 +17,7 @@ from rich.table import Table
 
 from .client_ext import ProtonMailExt
 from .config import RULES_FILE
-from .display import console, print_error, print_info, print_success, print_warning
+from .display import console, debug_enabled, print_error, print_info, print_success, print_warning
 
 # Conditions that require runtime (time-based) — can't be expressed in Sieve
 # Note: has_attachment and unread CAN be expressed in Sieve but need special handling
@@ -107,7 +107,9 @@ def probe_filter_api(client: ProtonMailExt) -> bool:
     try:
         client.get_filters()
         return True
-    except Exception:
+    except Exception as e:
+        if debug_enabled():
+            console.print(f"[dim]filter API probe failed: {e}[/dim]")
         return False
 
 

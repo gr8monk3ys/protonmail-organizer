@@ -305,7 +305,7 @@ def init():
 @click.option("--file", "rules_file", default=None, help="Path to rules YAML.")
 @click.option("--limit", default=200, help="Max messages to scan.")
 def rules_stats(rules_file, limit):
-    """Show rule coverage stats and unmatched senders."""
+    """Show rule coverage stats and unmatched senders. (experimental)"""
     client = get_authenticated_client()
     from .rule_analytics import rule_stats
 
@@ -316,7 +316,7 @@ def rules_stats(rules_file, limit):
 @click.option("--file", "rules_file", default=None, help="Path to rules YAML.")
 @click.option("--limit", default=200, help="Max messages to scan.")
 def suggest(rules_file, limit):
-    """Suggest new rules based on unmatched messages."""
+    """Suggest new rules based on unmatched messages. (experimental)"""
     client = get_authenticated_client()
     from .rule_analytics import suggest_rules
 
@@ -413,33 +413,43 @@ def respond():
     pass
 
 
+_BACKEND_OPTION = click.option(
+    "--backend",
+    type=click.Choice(["anthropic", "local"]),
+    default=None,
+    help="AI backend (default: PMO_AI_BACKEND). 'local' uses an OpenAI-compatible server.",
+)
+
+
 @respond.command(name="to")
 @click.argument("message_id")
 @click.option("--context", "-c", default=None, help="Instructions for the reply.")
-@click.option("--model", default=None, help="Claude model override (default: PMO_AI_MODEL).")
-def respond_to(message_id, context, model):
+@click.option("--model", default=None, help="Model override (default: PMO_AI_MODEL).")
+@_BACKEND_OPTION
+def respond_to(message_id, context, model, backend):
     """Generate a draft reply for a specific message."""
     client = get_authenticated_client()
     from .responder import respond_to_message
 
-    respond_to_message(client, message_id, context, model)
+    respond_to_message(client, message_id, context, model, backend)
 
 
 @respond.command(name="interactive")
-@click.option("--model", default=None, help="Claude model override (default: PMO_AI_MODEL).")
-def respond_interactive(model):
+@click.option("--model", default=None, help="Model override (default: PMO_AI_MODEL).")
+@_BACKEND_OPTION
+def respond_interactive(model, backend):
     """Pick a message from inbox, then draft a reply."""
     client = get_authenticated_client()
     from .responder import respond_interactive as _respond_interactive
 
-    _respond_interactive(client, model)
+    _respond_interactive(client, model, backend)
 
 
 @respond.command()
 @click.option("--refresh", is_flag=True, help="Re-analyze sent emails and rebuild profile.")
 @click.option("--samples", default=50, help="Number of sent emails to analyze.")
 def profile(refresh, samples):
-    """Show or rebuild your writing style profile."""
+    """Show or rebuild your writing style profile. (experimental)"""
     if refresh:
         client = get_authenticated_client()
         from .style_profile import refresh_profile
@@ -456,7 +466,7 @@ def profile(refresh, samples):
 
 @cli.group()
 def templates():
-    """Reusable email reply templates."""
+    """Reusable email reply templates. (experimental)"""
     pass
 
 
