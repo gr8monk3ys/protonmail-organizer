@@ -1,5 +1,9 @@
 # ProtonMail Organizer
 
+<p align="center">
+  <img src="docs/assets/hero.png" alt="protonmail-organizer preview" width="640">
+</p>
+
 A command-line tool to organize your ProtonMail inbox: search and bulk-manage
 messages, auto-sort with a YAML rule engine, compile rules to server-side Sieve
 filters, detect newsletters, draft AI replies in your own writing style, and more.
