@@ -115,3 +115,22 @@ class TestWarnIfTruncated:
 
         assert warn_if_truncated([{"ID": "m1"}]) is False
         assert capsys.readouterr().out == ""
+
+
+class TestWritePrivate:
+    def test_new_file_is_owner_only(self, tmp_path):
+        from protonmail_organizer.config import write_private
+
+        p = tmp_path / "secret.json"
+        write_private(p, "{}")
+        assert p.read_text() == "{}"
+        assert (p.stat().st_mode & 0o777) == 0o600
+
+    def test_overwrite_replaces_content(self, tmp_path):
+        from protonmail_organizer.config import write_private
+
+        p = tmp_path / "secret.json"
+        write_private(p, "old-longer-content")
+        write_private(p, "new")
+        assert p.read_text() == "new"
+        assert (p.stat().st_mode & 0o777) == 0o600

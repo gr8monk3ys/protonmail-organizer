@@ -61,6 +61,15 @@ def _backend_is_remote(backend: str) -> bool:
     return True
 
 
+def _egress_destination(backend: str) -> str:
+    """The hostname mail content is sent to, for the consent prompt."""
+    if backend in _ANTHROPIC_ALIASES:
+        from .consent import ANTHROPIC_HOST
+
+        return ANTHROPIC_HOST
+    return urlparse(config.AI_BASE_URL).hostname or config.AI_BASE_URL
+
+
 def _build_user_message(message: dict, body: str, context: Optional[str]) -> str:
     sender = message.get("Sender", {})
     sender_name = sender.get("Name", "") if isinstance(sender, dict) else ""
@@ -114,7 +123,7 @@ def generate_draft(
     if _backend_is_remote(backend):
         from .consent import require_ai_egress_ack
 
-        if not require_ai_egress_ack():
+        if not require_ai_egress_ack(_egress_destination(backend)):
             print_warning("AI reply cancelled (data-sharing not acknowledged).")
             return ""
 
@@ -189,7 +198,17 @@ def _generate_local(system_prompt: str, user_msg: str, model: str) -> str:
     try:
         return (data["choices"][0]["message"]["content"] or "").strip()
     except (KeyError, IndexError, TypeError):
-        print_error(f"Unexpected response from local model at {url}: {data!r}")
+        # Don't echo the body: it may contain generated reply text derived
+        # from the user's mail. Keys describe the shape without the content.
+        shape = list(data)[:5] if isinstance(data, dict) else type(data).__name__
+        print_error(
+            f"Unexpected response shape from local model at {url} (got: {shape}). "
+            "Set PMO_DEBUG=1 to inspect the raw response."
+        )
+        from .display import debug_enabled
+
+        if debug_enabled():
+            console.print(f"[dim]{str(data)[:500]}[/dim]")
         return ""
 
 

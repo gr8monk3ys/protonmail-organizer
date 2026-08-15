@@ -139,7 +139,9 @@ class TestLocalBackendRemoteHost:
         monkeypatch.setattr(config, "AI_BASE_URL", "https://gateway.example.com/v1")
         calls = []
         monkeypatch.setattr(
-            consent, "require_ai_egress_ack", lambda: calls.append(1) is None and False
+            consent,
+            "require_ai_egress_ack",
+            lambda *a, **k: calls.append(a) is None and False,
         )
 
         def must_not_post(*args, **kwargs):
@@ -148,4 +150,20 @@ class TestLocalBackendRemoteHost:
         monkeypatch.setattr(responder.requests, "post", must_not_post)
         out = responder.generate_draft(SAMPLE_MSG, "q", {}, backend="local")
         assert out == ""
-        assert calls == [1]
+        assert calls == [("gateway.example.com",)]
+
+
+class TestLocalBackendErrorPrivacy:
+    def test_unexpected_response_does_not_leak_content(self, monkeypatch, capsys):
+        from protonmail_organizer import config
+
+        monkeypatch.setattr(config, "AI_BASE_URL", "http://localhost:11434/v1")
+        monkeypatch.setattr(config, "AI_API_KEY", "")
+        monkeypatch.setattr(config, "AI_MODEL", "")
+        monkeypatch.setattr(
+            responder.requests,
+            "post",
+            lambda *a, **k: _Resp({"error": "PRIVATE-DRAFT-CONTENT"}),
+        )
+        assert responder.generate_draft(SAMPLE_MSG, "q", {}, backend="local") == ""
+        assert "PRIVATE-DRAFT-CONTENT" not in capsys.readouterr().out

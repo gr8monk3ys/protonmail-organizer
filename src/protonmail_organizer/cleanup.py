@@ -36,6 +36,7 @@ def delete_old_messages(
     folder: str = INBOX,
     dry_run: bool = False,
     permanent: bool = False,
+    assume_yes: bool = False,
 ) -> None:
     """Delete messages older than N days. Moves to Trash unless permanent."""
     cutoff = int((datetime.now() - timedelta(days=days)).timestamp())
@@ -53,12 +54,13 @@ def delete_old_messages(
     warn_if_truncated(messages)
     console.print(message_table(messages, title=f"Messages to {verb} ({len(messages)})"))
 
-    if not confirm_action(
-        f"{verb} {len(messages)} messages from {folder_name}", len(messages), dry_run
-    ):
-        if not dry_run:
-            print_warning("Cancelled.")
-        return
+    if dry_run or not assume_yes:
+        if not confirm_action(
+            f"{verb} {len(messages)} messages from {folder_name}", len(messages), dry_run
+        ):
+            if not dry_run:
+                print_warning("Cancelled.")
+            return
 
     if permanent:
         ids = _batch_delete(client, messages)
@@ -115,6 +117,7 @@ def handle_newsletters(
     dry_run: bool = False,
     do_delete: bool = False,
     permanent: bool = False,
+    assume_yes: bool = False,
 ) -> None:
     """Detect newsletters and optionally remove them (to Trash unless permanent)."""
     print_info("Scanning inbox for newsletters...")
@@ -134,10 +137,11 @@ def handle_newsletters(
         return
 
     verb = "permanently delete" if permanent else "move to Trash"
-    if not confirm_action(f"{verb} detected newsletters", len(newsletters), dry_run):
-        if not dry_run:
-            print_warning("Cancelled.")
-        return
+    if dry_run or not assume_yes:
+        if not confirm_action(f"{verb} detected newsletters", len(newsletters), dry_run):
+            if not dry_run:
+                print_warning("Cancelled.")
+            return
 
     if permanent:
         ids = _batch_delete(client, newsletters)

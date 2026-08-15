@@ -17,6 +17,7 @@ from .constants import (
     BATCH_DELAY_SECONDS,
     BATCH_SIZE,
     DESTRUCTIVE_ACTIONS,
+    FREE_PLAN_MAX_FOLDERS,
     FREE_PLAN_MAX_LABELS,
     INBOX,
     LABEL_TYPE_FOLDER,
@@ -153,6 +154,7 @@ def validate_rules(
 
     valid = True
     referenced_new_labels = set()
+    referenced_new_folders = set()
 
     for i, rule in enumerate(rules, 1):
         name = rule.get("name", f"Rule {i}")
@@ -199,31 +201,39 @@ def validate_rules(
                 print_error(f"Rule '{name}': unknown action '{key}'")
                 valid = False
 
-        # Check label references
-        for action_key in ("add_label", "remove_label", "move_to"):
+        # Check label/folder references. move_to creates folders, which have
+        # their own free-plan quota, separate from labels.
+        for action_key in ("add_label", "remove_label"):
             target = actions.get(action_key)
             if target and target.lower() not in all_names:
                 referenced_new_labels.add(target)
+        move_target = actions.get("move_to")
+        if move_target and move_target.lower() not in all_names:
+            referenced_new_folders.add(move_target)
 
-    # Check free-plan limits for new labels
-    new_label_count = len(referenced_new_labels)
-    if new_label_count > 0:
-        available_labels = FREE_PLAN_MAX_LABELS - len(user_labels)
-        if new_label_count > available_labels:
-            print_warning(
-                f"Rules reference {new_label_count} label(s) that don't exist yet: "
-                f"{referenced_new_labels}. Only {available_labels} more can be "
-                f"created on the free plan."
-            )
-        else:
-            print_info(
-                f"Rules reference {new_label_count} new label(s): {referenced_new_labels}. "
-                f"They will be created when rules run."
-            )
+    # Check free-plan limits per kind
+    _warn_quota(referenced_new_labels, "label", FREE_PLAN_MAX_LABELS - len(user_labels))
+    _warn_quota(referenced_new_folders, "folder", FREE_PLAN_MAX_FOLDERS - len(user_folders))
 
     if valid:
         print_success(f"All {len(rules)} rule(s) are valid.")
     return valid
+
+
+def _warn_quota(names: set, kind: str, available: int) -> None:
+    """Report referenced-but-missing labels/folders against the free-plan quota."""
+    if not names:
+        return
+    if len(names) > available:
+        print_warning(
+            f"Rules reference {len(names)} {kind}(s) that don't exist yet: {names}. "
+            f"Only {available} more can be created on the free plan."
+        )
+    else:
+        print_info(
+            f"Rules reference {len(names)} new {kind}(s): {names}. "
+            f"They will be created when rules run."
+        )
 
 
 def run_rules(

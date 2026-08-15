@@ -14,14 +14,14 @@ Stored at ~/.config/protonmail-organizer/operations.json (mode 0600).
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
 from typing import Optional
 
+import click
 from rich.table import Table
 
 from .client_ext import ProtonMailExt
-from .config import CONFIG_DIR, ensure_config_dir
+from .config import CONFIG_DIR, ensure_config_dir, write_private
 from .constants import BATCH_DELAY_SECONDS, BATCH_SIZE, SYSTEM_LABELS
 from .display import console, print_error, print_info, print_success, print_warning
 
@@ -43,8 +43,7 @@ def _load() -> list:
 def _save(ops: list) -> None:
     """Persist the operation log with restrictive permissions."""
     ensure_config_dir()
-    OPLOG_FILE.write_text(json.dumps(ops[-MAX_OPS:], indent=2))
-    os.chmod(OPLOG_FILE, 0o600)
+    write_private(OPLOG_FILE, json.dumps(ops[-MAX_OPS:], indent=2))
 
 
 def record_operation(
@@ -107,8 +106,8 @@ def list_operations() -> None:
     print_info("Run 'pmo undo' to reverse the most recent undoable operation.")
 
 
-def undo_last(client: ProtonMailExt) -> None:
-    """Reverse the most recent logged operation."""
+def undo_last(client: ProtonMailExt, assume_yes: bool = False) -> None:
+    """Reverse the most recent logged operation (confirming first unless assume_yes)."""
     ops = _load()
     if not ops:
         print_warning("Nothing to undo.")
@@ -125,6 +124,12 @@ def undo_last(client: ProtonMailExt) -> None:
     ids = op.get("message_ids", [])
     added = op.get("added_label")
     removed = op.get("removed_label")
+
+    if not assume_yes and not click.confirm(
+        f"Undo '{desc}' ({len(ids)} message(s))?", default=False
+    ):
+        print_warning("Cancelled.")
+        return
 
     print_info(f"Undoing: {desc} ({len(ids)} message(s))...")
     try:

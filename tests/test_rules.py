@@ -389,3 +389,33 @@ class TestBatchErrorTolerance:
         ids = [str(i) for i in range(BATCH_SIZE * 2)]
         rules._batch_operation(flaky, ids, "Testing")
         assert len(calls) == 2
+
+
+class TestValidateFolderQuota:
+    """move_to creates folders, so validation must budget the folder quota."""
+
+    def test_move_to_budgets_against_folder_quota(self, mock_client, tmp_path, capsys):
+        from types import SimpleNamespace
+
+        from protonmail_organizer import rules
+        from protonmail_organizer.constants import LABEL_TYPE_FOLDER
+
+        full_folders = [SimpleNamespace(name=f"Folder{i}") for i in range(3)]
+        mock_client.get_labels_by_type_id = (
+            lambda t: full_folders if t == LABEL_TYPE_FOLDER else []
+        )
+
+        rules_file = tmp_path / "rules.yaml"
+        rules_file.write_text(
+            "rules:\n"
+            '  - name: "File receipts"\n'
+            "    conditions:\n"
+            '      sender_contains: "receipt"\n'
+            "    actions:\n"
+            '      move_to: "NewFolder"\n'
+        )
+
+        rules.validate_rules(mock_client, rules_file=str(rules_file))
+        out = capsys.readouterr().out
+        assert "folder" in out.lower()
+        assert "0 more" in out

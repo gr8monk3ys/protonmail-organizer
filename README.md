@@ -115,7 +115,7 @@ Bulk `cleanup old` / `cleanup newsletters` move messages to **Trash** by default
 and reversible:
 
 ```bash
-pmo undo            # reverse the most recent archive / move-to-Trash
+pmo undo            # reverse the most recent archive / move-to-Trash (confirms first)
 pmo undo --list     # show the recent operation history
 ```
 
@@ -270,8 +270,14 @@ machine, and the egress acknowledgment is skipped automatically.
 
 Because this is an unofficial client and AI drafting sends data off-device, the
 first time you authenticate (and the first time you draft an AI reply) you are
-asked to acknowledge the risk once. The choice is saved in `consent.json`. For
-non-interactive use (scripts, CI), set `PMO_ACCEPT_RISKS=1` to accept up front.
+asked to acknowledge the risk once. The AI acknowledgment names the actual
+destination host and is stored **per destination** — acknowledging Anthropic
+never silently covers a different gateway. Choices are saved in `consent.json`.
+
+For non-interactive use (scripts, CI) the two risks are separate opt-ins:
+`PMO_ACCEPT_RISKS=1` accepts the unofficial-API risk, and
+`PMO_ACCEPT_AI_EGRESS=1` accepts sending mail content to the AI destination —
+so scripted cleanup never silently authorizes data egress.
 
 ### Troubleshooting
 

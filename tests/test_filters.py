@@ -331,3 +331,41 @@ class TestPartialCompileSafety:
         ]
         sieve = compile_rules_to_sieve(rules)
         assert 'fileinto "Archive";' in sieve
+
+
+RULES_YAML_SIMPLE = """\
+rules:
+  - name: "Label GitHub"
+    conditions:
+      sender_domain: "github.com"
+    actions:
+      add_label: "GitHub"
+"""
+
+
+class TestUpdateFilterConfirmation:
+    """filters update mutates server-side filters; it must confirm first."""
+
+    def _rules_file(self, tmp_path):
+        f = tmp_path / "rules.yaml"
+        f.write_text(RULES_YAML_SIMPLE)
+        return str(f)
+
+    def test_declined_update_does_not_push(self, mock_client, tmp_path, monkeypatch):
+        from protonmail_organizer import filters
+
+        monkeypatch.setattr(filters.console, "input", lambda *a, **k: "n")
+        filters.update_filter_from_rules(mock_client, "f1", rules_file=self._rules_file(tmp_path))
+        mock_client.update_filter.assert_not_called()
+
+    def test_assume_yes_updates_without_prompt(self, mock_client, tmp_path, monkeypatch):
+        from protonmail_organizer import filters
+
+        def no_prompt(*a, **k):
+            raise AssertionError("must not prompt with assume_yes")
+
+        monkeypatch.setattr(filters.console, "input", no_prompt)
+        filters.update_filter_from_rules(
+            mock_client, "f1", rules_file=self._rules_file(tmp_path), assume_yes=True
+        )
+        mock_client.update_filter.assert_called_once()

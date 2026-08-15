@@ -149,6 +149,40 @@ def push_rules(client: ProtonMailExt, rules_file: Optional[str] = None) -> None:
         _suggest_manual_paste(sieve)
 
 
+def update_filter_from_rules(
+    client: ProtonMailExt,
+    filter_id: str,
+    rules_file: Optional[str] = None,
+    name: Optional[str] = None,
+    assume_yes: bool = False,
+) -> None:
+    """Recompile YAML rules and overwrite an existing server-side filter."""
+    sieve = _compile_from_file(rules_file, client=client)
+    if not sieve:
+        return
+
+    console.print(Syntax(sieve, "text", theme="monokai", line_numbers=True))
+
+    if not assume_yes:
+        confirm = (
+            console.input(
+                f"\n[yellow]Overwrite server-side filter {filter_id} with this Sieve? "
+                "(y/N): [/yellow]"
+            )
+            .strip()
+            .lower()
+        )
+        if confirm != "y":
+            print_warning("Cancelled.")
+            return
+
+    try:
+        client.update_filter(filter_id, sieve, name=name)
+        print_success(f"Updated filter {filter_id}")
+    except Exception as e:
+        print_error(f"Failed to update filter: {e}")
+
+
 def delete_filter(
     client: ProtonMailExt, filter_id: Optional[str] = None, delete_all: bool = False
 ) -> None:

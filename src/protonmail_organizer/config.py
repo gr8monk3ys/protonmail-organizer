@@ -40,3 +40,18 @@ def ensure_config_dir() -> Path:
     """Create config directory if it doesn't exist. Returns the path."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     return CONFIG_DIR
+
+
+def write_private(path: Path, text: str) -> None:
+    """Write text to a file that is owner-only (0o600) from the moment it exists.
+
+    Unlike write-then-chmod, the file is never world-readable, even briefly.
+    Files created earlier with looser permissions are tightened too.
+    """
+
+    def _opener(p, flags):
+        return os.open(p, flags, 0o600)
+
+    with open(path, "w", opener=_opener) as f:
+        f.write(text)
+    os.chmod(path, 0o600)
