@@ -401,9 +401,7 @@ class TestValidateFolderQuota:
         from protonmail_organizer.constants import LABEL_TYPE_FOLDER
 
         full_folders = [SimpleNamespace(name=f"Folder{i}") for i in range(3)]
-        mock_client.get_labels_by_type_id = (
-            lambda t: full_folders if t == LABEL_TYPE_FOLDER else []
-        )
+        mock_client.get_labels_by_type_id = lambda t: full_folders if t == LABEL_TYPE_FOLDER else []
 
         rules_file = tmp_path / "rules.yaml"
         rules_file.write_text(
