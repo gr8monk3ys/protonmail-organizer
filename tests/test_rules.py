@@ -237,9 +237,7 @@ class TestApplyActionsSafety:
         from protonmail_organizer.constants import INBOX, TRASH
 
         recorded = []
-        monkeypatch.setattr(
-            rules, "record_operation", lambda *a, **k: recorded.append((a, k))
-        )
+        monkeypatch.setattr(rules, "record_operation", lambda *a, **k: recorded.append((a, k)))
         rules._apply_actions(
             mock_client, [sample_messages[0]], {"delete": True}, {}, source_folder=INBOX
         )
@@ -256,9 +254,7 @@ class TestApplyActionsSafety:
         from protonmail_organizer.constants import ARCHIVE, INBOX
 
         recorded = []
-        monkeypatch.setattr(
-            rules, "record_operation", lambda *a, **k: recorded.append((a, k))
-        )
+        monkeypatch.setattr(rules, "record_operation", lambda *a, **k: recorded.append((a, k)))
         rules._apply_actions(
             mock_client, [sample_messages[0]], {"archive": True}, {}, source_folder=INBOX
         )
@@ -281,9 +277,7 @@ class TestApplyActionsSafety:
 
         created = {}
 
-        def fake_create_label(
-            client, name, color=DEFAULT_LABEL_COLOR, label_type=LABEL_TYPE_LABEL
-        ):
+        def fake_create_label(client, name, color=DEFAULT_LABEL_COLOR, label_type=LABEL_TYPE_LABEL):
             created["name"] = name
             created["label_type"] = label_type
             return {"ID": "new-folder-id"}

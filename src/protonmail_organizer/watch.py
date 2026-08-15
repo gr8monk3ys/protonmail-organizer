@@ -115,9 +115,7 @@ def _poll_cycle(
             _apply_actions(client, matched, actions, label_map)
             for msg in matched:
                 addr, subject = _sender_and_subject(msg)
-                action_log.append(
-                    {"time": now, "rule": name, "sender": addr, "subject": subject}
-                )
+                action_log.append({"time": now, "rule": name, "sender": addr, "subject": subject})
         except Exception as e:
             console.print(f"  [red]Failed to apply rule '{name}': {e}[/red]")
 
