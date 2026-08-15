@@ -25,6 +25,7 @@ from .display import (
     print_success,
     print_warning,
     progress_context,
+    warn_if_truncated,
 )
 from .oplog import record_operation
 
@@ -49,6 +50,7 @@ def delete_old_messages(
         print_warning("No messages found matching criteria.")
         return
 
+    warn_if_truncated(messages)
     console.print(message_table(messages, title=f"Messages to {verb} ({len(messages)})"))
 
     if not confirm_action(
@@ -89,6 +91,7 @@ def archive_by_sender(
         print_warning(f"No messages from '{pattern}' found in Inbox.")
         return
 
+    warn_if_truncated(messages)
     console.print(message_table(messages, title=f"Messages to archive ({len(messages)})"))
 
     if not confirm_action(
@@ -117,6 +120,7 @@ def handle_newsletters(
     print_info("Scanning inbox for newsletters...")
 
     messages = client.search_messages_all(label_id=INBOX)
+    warn_if_truncated(messages)
     newsletters = [m for m in messages if _is_newsletter(m)]
 
     if not newsletters:
@@ -162,6 +166,8 @@ def empty_folder(
     if not messages:
         print_warning(f"{folder_name} is already empty.")
         return
+
+    warn_if_truncated(messages)
 
     if not skip_confirm:
         if not confirm_action(f"permanently delete all from {folder_name}", len(messages)):

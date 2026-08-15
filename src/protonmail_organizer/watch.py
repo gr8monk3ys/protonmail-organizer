@@ -91,38 +91,47 @@ def _poll_cycle(
     console.print(f"[dim]{now}[/dim] [cyan]{len(new_messages)} new message(s)[/cyan]")
 
     for msg in new_messages:
-        msg_id = msg.get("ID", "")
-        seen_ids.add(msg_id)
+        seen_ids.add(msg.get("ID", ""))
 
-        sender = msg.get("Sender", {})
-        addr = sender.get("Address", "") if isinstance(sender, dict) else ""
-        subject = msg.get("Subject", "")
+    # Apply each rule once per cycle to all its matches, rather than once per
+    # message — fewer API calls, and one oplog entry per rule instead of a
+    # flood of single-message entries evicting the undo history.
+    unmatched_ids = {m.get("ID", "") for m in new_messages}
+    for rule in rules:
+        name = rule.get("name", "Unnamed")
+        conditions = rule.get("conditions", {})
+        actions = rule.get("actions", {})
 
-        matched_rules = []
-        for rule in rules:
-            conditions = rule.get("conditions", {})
-            if _matches_conditions(msg, conditions):
-                matched_rules.append(rule)
+        matched = [m for m in new_messages if _matches_conditions(m, conditions)]
+        if not matched:
+            continue
 
-        if matched_rules:
-            for rule in matched_rules:
-                name = rule.get("name", "Unnamed")
-                actions = rule.get("actions", {})
-                console.print(f"  [green]>[/green] [bold]{name}[/bold] → {addr} | {subject[:50]}")
-                try:
-                    _apply_actions(client, [msg], actions, label_map)
-                    action_log.append(
-                        {
-                            "time": now,
-                            "rule": name,
-                            "sender": addr,
-                            "subject": subject[:50],
-                        }
-                    )
-                except Exception as e:
-                    console.print(f"  [red]Failed to apply rule '{name}': {e}[/red]")
-        else:
-            console.print(f"  [dim]  No rules matched: {addr} | {subject[:50]}[/dim]")
+        for msg in matched:
+            unmatched_ids.discard(msg.get("ID", ""))
+            addr, subject = _sender_and_subject(msg)
+            console.print(f"  [green]>[/green] [bold]{name}[/bold] → {addr} | {subject}")
+
+        try:
+            _apply_actions(client, matched, actions, label_map)
+            for msg in matched:
+                addr, subject = _sender_and_subject(msg)
+                action_log.append(
+                    {"time": now, "rule": name, "sender": addr, "subject": subject}
+                )
+        except Exception as e:
+            console.print(f"  [red]Failed to apply rule '{name}': {e}[/red]")
+
+    for msg in new_messages:
+        if msg.get("ID", "") in unmatched_ids:
+            addr, subject = _sender_and_subject(msg)
+            console.print(f"  [dim]  No rules matched: {addr} | {subject}[/dim]")
+
+
+def _sender_and_subject(msg: dict) -> tuple[str, str]:
+    """Sender address and truncated subject for log lines."""
+    sender = msg.get("Sender", {})
+    addr = sender.get("Address", "") if isinstance(sender, dict) else ""
+    return addr, msg.get("Subject", "")[:50]
 
 
 def _show_summary(action_log: list) -> None:

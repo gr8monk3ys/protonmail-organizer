@@ -42,6 +42,10 @@ FREE_PLAN_MAX_FOLDERS = 3
 BATCH_SIZE = 50
 BATCH_DELAY_SECONDS = 0.2
 
+# Rule actions that destroy or discard mail. Gated behind confirmation at
+# runtime, and never compiled into a widened server-side Sieve filter.
+DESTRUCTIVE_ACTIONS = frozenset({"delete"})
+
 # Available label colors (ProtonMail's palette)
 LABEL_COLORS = [
     "#7272a7",

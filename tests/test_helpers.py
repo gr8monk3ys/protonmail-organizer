@@ -98,3 +98,20 @@ class TestValidateTemplateName:
 
     def test_name_with_slash_invalid(self):
         assert _validate_name("a/b") is not None
+
+
+class TestWarnIfTruncated:
+    def test_warns_when_truncated(self, capsys):
+        from protonmail_organizer.client_ext import MessageList
+        from protonmail_organizer.display import warn_if_truncated
+
+        messages = MessageList([{"ID": "m1"}])
+        messages.truncated = True
+        assert warn_if_truncated(messages) is True
+        assert "more messages" in capsys.readouterr().out.lower()
+
+    def test_silent_when_complete(self, capsys):
+        from protonmail_organizer.display import warn_if_truncated
+
+        assert warn_if_truncated([{"ID": "m1"}]) is False
+        assert capsys.readouterr().out == ""

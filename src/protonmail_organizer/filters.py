@@ -17,6 +17,7 @@ from rich.table import Table
 
 from .client_ext import ProtonMailExt
 from .config import RULES_FILE
+from .constants import DESTRUCTIVE_ACTIONS
 from .display import console, debug_enabled, print_error, print_info, print_success, print_warning
 
 # Conditions that require runtime (time-based) — can't be expressed in Sieve
@@ -227,6 +228,15 @@ def compile_rules_to_sieve(rules: list, label_map: dict | None = None) -> str:
             continue
 
         if runtime_conditions:
+            # Dropping a condition from an AND widens the match. That is
+            # tolerable for reversible actions, but a destructive action
+            # compiled against a wider match would discard mail the rule
+            # never intended to touch — skip the whole rule instead.
+            if any(actions.get(a) for a in DESTRUCTIVE_ACTIONS):
+                skipped.append(
+                    (name, f"runtime-only conditions {runtime_conditions} + destructive action")
+                )
+                continue
             skipped.append((name, f"partial — skipping conditions: {runtime_conditions}"))
 
         # Build Sieve condition
@@ -274,7 +284,7 @@ def compile_rules_to_sieve(rules: list, label_map: dict | None = None) -> str:
 
     # Show skipped rules
     if skipped:
-        print_warning(f"\nSkipped {len(skipped)} rule(s) (runtime-only conditions):")
+        print_warning(f"\nSkipped or partially compiled {len(skipped)} rule(s):")
         for name, reason in skipped:
             print_info(f"  - {name}: {reason}")
 

@@ -533,7 +533,7 @@ def use(template_name, message_id):
 @cli.command()
 @click.option("--list", "show_list", is_flag=True, help="Show the operation history instead.")
 def undo(show_list):
-    """Reverse the most recent bulk cleanup operation (archive / move-to-Trash)."""
+    """Reverse the most recent bulk operation (cleanup or rule archive / move / trash)."""
     if show_list:
         from .oplog import list_operations
 

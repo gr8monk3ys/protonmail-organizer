@@ -4,19 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from protonmail_organizer import oplog
 from protonmail_organizer.constants import ARCHIVE, INBOX, TRASH
-
-
-@pytest.fixture
-def oplog_file(tmp_path, monkeypatch):
-    """Redirect the operation log to a temp file."""
-    path = tmp_path / "operations.json"
-    monkeypatch.setattr(oplog, "OPLOG_FILE", path)
-    monkeypatch.setattr(oplog, "ensure_config_dir", lambda: tmp_path)
-    return path
 
 
 class TestRecordAndLoad:

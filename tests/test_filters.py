@@ -293,3 +293,41 @@ class TestCompileRulesToSieve:
         # 4. older_than_days + unread -> delete (partial — unread part compiles)
         # Count if-blocks
         assert result.count("if ") >= 3
+
+
+# ---------------------------------------------------------------------------
+# Partial-compile safety: dropping a runtime-only condition widens the match,
+# so a destructive action must never survive a partial compile.
+# ---------------------------------------------------------------------------
+
+
+class TestPartialCompileSafety:
+    def test_destructive_rule_with_runtime_condition_is_skipped_entirely(self):
+        """delete + runtime-only condition must not compile to a wider discard."""
+        rules = [
+            {
+                "name": "Delete invoices",
+                "conditions": {
+                    "sender_domain": "example.com",
+                    "subject_matches": "invoice",
+                },
+                "actions": {"delete": True},
+            }
+        ]
+        sieve = compile_rules_to_sieve(rules)
+        assert "discard" not in sieve
+
+    def test_non_destructive_partial_rule_still_compiles(self):
+        """Reversible actions may compile with the static subset of conditions."""
+        rules = [
+            {
+                "name": "Archive old promos",
+                "conditions": {
+                    "sender_contains": "promo",
+                    "older_than_days": 30,
+                },
+                "actions": {"archive": True},
+            }
+        ]
+        sieve = compile_rules_to_sieve(rules)
+        assert 'fileinto "Archive";' in sieve

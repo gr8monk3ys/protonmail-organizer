@@ -16,21 +16,26 @@ from .constants import (
     ARCHIVE,
     BATCH_DELAY_SECONDS,
     BATCH_SIZE,
+    DESTRUCTIVE_ACTIONS,
     FREE_PLAN_MAX_LABELS,
     INBOX,
     LABEL_TYPE_FOLDER,
     LABEL_TYPE_LABEL,
     STARRED,
     SYSTEM_LABELS,
+    TRASH,
 )
 from .display import (
+    confirm_action,
     console,
     message_table,
     print_error,
     print_info,
     print_success,
     print_warning,
+    warn_if_truncated,
 )
+from .oplog import record_operation
 
 EXAMPLE_RULES = """\
 # ProtonMail Organizer Rules
@@ -57,6 +62,7 @@ rules:
     actions:
       star: true
 
+  # "delete" moves messages to Trash (recoverable with 'pmo undo').
   - name: "Delete old newsletters"
     conditions:
       sender_contains: "newsletter"
@@ -239,6 +245,7 @@ def run_rules(
         print_warning(f"No messages in {folder_name}.")
         return
 
+    warn_if_truncated(messages)
     print_info(f"Evaluating {len(rules)} rule(s) against {len(messages)} message(s)...")
 
     # Build label name -> ID mapping
@@ -262,10 +269,10 @@ def run_rules(
         if not matched:
             continue
 
-        total_matched += len(matched)
         console.print(f"\n[cyan]Rule '{name}':[/cyan] matched {len(matched)} message(s)")
 
         if dry_run:
+            total_matched += len(matched)
             console.print(
                 message_table(
                     matched[:10],
@@ -276,6 +283,15 @@ def run_rules(
                 console.print(f"[dim]  ...and {len(matched) - 10} more[/dim]")
             continue
 
+        destructive = any(actions.get(a) for a in DESTRUCTIVE_ACTIONS)
+        if destructive and not confirm_action(
+            f"move {len(matched)} message(s) matched by rule '{name}' to Trash",
+            len(matched),
+        ):
+            print_warning(f"Skipped rule '{name}'.")
+            continue
+
+        total_matched += len(matched)
         _apply_actions(client, matched, actions, label_map, source_folder=folder)
 
     if total_matched == 0:
@@ -365,20 +381,33 @@ def _apply_actions(
     source_folder is the folder the messages came from; ``move_to`` removes
     that label after filing into the target (so a move out of Archive removes
     Archive, not Inbox).
+
+    ``delete`` moves to Trash rather than hard-deleting, and folder moves are
+    recorded in the oplog, so everything a rule does is reversible via
+    ``pmo undo``.
     """
     ids = [m.get("ID", "") for m in messages]
-    source_name = SYSTEM_LABELS.get(source_folder, "source folder")
 
     for action, value in actions.items():
         try:
             if action == "delete" and value:
-                _batch_operation(client.delete_messages, ids, "Deleting")
+                _move_and_record(
+                    client,
+                    ids,
+                    TRASH,
+                    "Moving to Trash",
+                    source_folder,
+                    f"Rule moved {len(ids)} message(s) to Trash",
+                )
 
             elif action == "archive" and value:
-                _batch_operation(
-                    lambda batch: client.set_label_for_messages(ARCHIVE, batch),
+                _move_and_record(
+                    client,
                     ids,
+                    ARCHIVE,
                     "Archiving",
+                    source_folder,
+                    f"Rule archived {len(ids)} message(s)",
                 )
 
             elif action == "star" and value:
@@ -410,42 +439,67 @@ def _apply_actions(
                     )
 
             elif action == "move_to":
-                label_id = _resolve_label(client, value, label_map)
+                label_id = _resolve_label(client, value, label_map, label_type=LABEL_TYPE_FOLDER)
                 if label_id:
-                    # File into the target, then remove from the source folder.
-                    _batch_operation(
-                        lambda batch, lid=label_id: client.set_label_for_messages(lid, batch),
+                    _move_and_record(
+                        client,
                         ids,
+                        label_id,
                         f"Moving to '{value}'",
-                    )
-                    _batch_operation(
-                        lambda batch, sid=source_folder: client.unset_label_for_messages(
-                            sid, batch
-                        ),
-                        ids,
-                        f"Removing from {source_name}",
+                        source_folder,
+                        f"Rule moved {len(ids)} message(s) to '{value}'",
+                        unset_source=True,
                     )
 
         except Exception as e:
             print_error(f"Action '{action}' failed: {e}")
 
 
+def _move_and_record(
+    client: ProtonMailExt,
+    ids: list,
+    target_label: str,
+    verb: str,
+    source_folder: str,
+    description: str,
+    unset_source: bool = False,
+) -> None:
+    """File messages into target_label and log an undoable operation.
+
+    System folders (Trash/Archive) are exclusive server-side, so only moves
+    into custom folders need the explicit unset of the source folder.
+    """
+    _batch_operation(
+        lambda batch: client.set_label_for_messages(target_label, batch),
+        ids,
+        verb,
+    )
+    if unset_source:
+        source_name = SYSTEM_LABELS.get(source_folder, "source folder")
+        _batch_operation(
+            lambda batch: client.unset_label_for_messages(source_folder, batch),
+            ids,
+            f"Removing from {source_name}",
+        )
+    record_operation(description, ids, added_label=target_label, removed_label=source_folder)
+
+
 def _resolve_label(
     client: ProtonMailExt,
     name: str,
     label_map: dict,
+    label_type: int = LABEL_TYPE_LABEL,
 ) -> Optional[str]:
-    """Resolve a label name to ID, creating it if needed."""
+    """Resolve a label name to ID, creating it (as label_type) if needed."""
     label_id = label_map.get(name.lower())
     if label_id:
         return label_id
 
-    # Try to create the label
-    print_info(f"Creating label '{name}'...")
+    print_info(f"Creating '{name}'...")
     try:
         from .labels import create_label
 
-        result = create_label(client, name)
+        result = create_label(client, name, label_type=label_type)
         if result:
             new_id = result.get("ID", "")
             label_map[name.lower()] = new_id
@@ -457,10 +511,15 @@ def _resolve_label(
 
 
 def _batch_operation(func, ids: list, description: str) -> None:
-    """Run a function in batches with delay."""
+    """Run a function in batches with delay; one failed batch doesn't stop the rest."""
+    failed = 0
     for i in range(0, len(ids), BATCH_SIZE):
         batch = ids[i : i + BATCH_SIZE]
-        func(batch)
+        try:
+            func(batch)
+        except Exception as e:
+            failed += len(batch)
+            print_error(f"  Batch failed ({description}): {e}")
         if i + BATCH_SIZE < len(ids):
             time.sleep(BATCH_DELAY_SECONDS)
-    print_success(f"  {description}: {len(ids)} message(s)")
+    print_success(f"  {description}: {len(ids) - failed} message(s)")
