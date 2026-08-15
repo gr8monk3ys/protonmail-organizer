@@ -84,6 +84,13 @@ def stats_panel(stats: dict) -> Panel:
     return Panel("\n".join(lines), title="Account Stats", border_style="blue")
 
 
+def truncate(text: str, max_len: int) -> str:
+    """Truncate text with ellipsis."""
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "..."
+
+
 def warn_if_truncated(messages) -> bool:
     """Warn when a capped search returned only part of the matching messages.
 
@@ -108,7 +115,7 @@ def confirm_action(message: str, count: int, dry_run: bool = False) -> bool:
     return console.input("[yellow]Proceed? (y/N): [/yellow]").strip().lower() == "y"
 
 
-def progress_context(description: str = "Processing..."):
+def progress_context():
     """Return a Rich progress context manager."""
     return Progress(
         SpinnerColumn(),

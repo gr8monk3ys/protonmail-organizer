@@ -18,7 +18,7 @@ from rich.table import Table
 from .client_ext import ProtonMailExt
 from .config import STYLE_PROFILE_FILE, ensure_config_dir, write_private
 from .constants import ALL_SENT
-from .display import console, debug_enabled, print_info, print_success, print_warning
+from .display import console, debug_enabled, print_info, print_success, print_warning, truncate
 
 
 def build_style_profile(client: ProtonMailExt, sample_count: int = 50) -> dict:
@@ -323,9 +323,7 @@ def _truncate_to_sentences(text: str, max_sentences: int = 3) -> str:
         result = " ".join(sentences[:max_sentences])
 
     # Hard cap at 200 chars as additional safety
-    if len(result) > 200:
-        result = result[:200] + "..."
-    return result
+    return truncate(result, 200)
 
 
 def _describe_punctuation(excl_ratio: float) -> str:

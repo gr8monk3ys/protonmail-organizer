@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import re
-import time
 from datetime import datetime, timedelta
 
-from .client_ext import ProtonMailExt
+from .batch import batch_apply
+from .client_ext import ProtonMailExt, sender_address, sender_parts
 from .constants import (
     ARCHIVE,
-    BATCH_DELAY_SECONDS,
-    BATCH_SIZE,
     INBOX,
     SYSTEM_LABELS,
     TRASH,
@@ -20,11 +18,9 @@ from .display import (
     console,
     debug_enabled,
     message_table,
-    print_error,
     print_info,
     print_success,
     print_warning,
-    progress_context,
     warn_if_truncated,
 )
 from .oplog import record_operation
@@ -193,42 +189,18 @@ def _ids_of(messages: list) -> list:
 def _batch_delete(client: ProtonMailExt, messages: list) -> list:
     """Permanently delete messages in batches. Returns the affected IDs."""
     ids = _ids_of(messages)
-    total = len(ids)
-
-    with progress_context() as progress:
-        task = progress.add_task("Deleting...", total=total)
-        for i in range(0, total, BATCH_SIZE):
-            batch = ids[i : i + BATCH_SIZE]
-            try:
-                client.delete_messages(batch)
-            except Exception as e:
-                print_error(f"Batch delete failed: {e}")
-            progress.update(task, advance=len(batch))
-            if i + BATCH_SIZE < total:
-                time.sleep(BATCH_DELAY_SECONDS)
-
-    print_success(f"Deleted {total} messages.")
+    failed = batch_apply(client.delete_messages, ids, "Deleting")
+    print_success(f"Deleted {len(ids) - failed} messages.")
     return ids
 
 
 def _batch_trash(client: ProtonMailExt, messages: list) -> list:
     """Move messages to Trash (recoverable) in batches. Returns the affected IDs."""
     ids = _ids_of(messages)
-    total = len(ids)
-
-    with progress_context() as progress:
-        task = progress.add_task("Moving to Trash...", total=total)
-        for i in range(0, total, BATCH_SIZE):
-            batch = ids[i : i + BATCH_SIZE]
-            try:
-                client.set_label_for_messages(TRASH, batch)
-            except Exception as e:
-                print_error(f"Batch trash failed: {e}")
-            progress.update(task, advance=len(batch))
-            if i + BATCH_SIZE < total:
-                time.sleep(BATCH_DELAY_SECONDS)
-
-    print_success(f"Moved {total} messages to Trash. Run 'pmo undo' to restore.")
+    failed = batch_apply(
+        lambda chunk: client.set_label_for_messages(TRASH, chunk), ids, "Moving to Trash"
+    )
+    print_success(f"Moved {len(ids) - failed} messages to Trash. Run 'pmo undo' to restore.")
     return ids
 
 
@@ -240,21 +212,12 @@ def _batch_label(
 ) -> list:
     """Apply a label to messages in batches. Returns the affected IDs."""
     ids = _ids_of(messages)
-    total = len(ids)
-
-    with progress_context() as progress:
-        task = progress.add_task(f"{action.capitalize()}ing...", total=total)
-        for i in range(0, total, BATCH_SIZE):
-            batch = ids[i : i + BATCH_SIZE]
-            try:
-                client.set_label_for_messages(label_id, batch)
-            except Exception as e:
-                print_error(f"Batch {action} failed: {e}")
-            progress.update(task, advance=len(batch))
-            if i + BATCH_SIZE < total:
-                time.sleep(BATCH_DELAY_SECONDS)
-
-    print_success(f"{action.capitalize()}d {total} messages.")
+    failed = batch_apply(
+        lambda chunk: client.set_label_for_messages(label_id, chunk),
+        ids,
+        action.capitalize() + "ing",
+    )
+    print_success(f"{action.capitalize()}d {len(ids) - failed} messages.")
     return ids
 
 
@@ -332,9 +295,7 @@ def find_unsubscribe_links(client: ProtonMailExt, limit: int = 50) -> None:
                 unsub = match.group(1).strip()
 
         if unsub:
-            sender = msg_summary.get("Sender", {})
-            addr = sender.get("Address", "") if isinstance(sender, dict) else ""
-            name = sender.get("Name", "") if isinstance(sender, dict) else ""
+            name, addr = sender_parts(msg_summary)
 
             # Extract URLs from the header value
             urls = re.findall(r"<(https?://[^>]+)>", unsub)
@@ -383,8 +344,7 @@ def find_unsubscribe_links(client: ProtonMailExt, limit: int = 50) -> None:
 
 def _is_newsletter(msg: dict) -> bool:
     """Heuristic: check if a message looks like a newsletter."""
-    sender = msg.get("Sender", {})
-    addr = sender.get("Address", "") if isinstance(sender, dict) else ""
+    addr = sender_address(msg)
     subject = msg.get("Subject", "")
 
     addr_lower = addr.lower()

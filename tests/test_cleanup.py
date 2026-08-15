@@ -155,7 +155,9 @@ class TestAssumeYes:
         from protonmail_organizer import cleanup
 
         mock_client.search_messages_all.return_value = sample_messages[:2]
-        monkeypatch.setattr(cleanup, "BATCH_DELAY_SECONDS", 0)
+        from protonmail_organizer import batch
+
+        monkeypatch.setattr(batch, "BATCH_DELAY_SECONDS", 0)
 
         def no_prompt(*a, **k):
             raise AssertionError("confirm_action must not be called with assume_yes")
@@ -170,7 +172,9 @@ class TestAssumeYes:
         from protonmail_organizer import cleanup
 
         mock_client.search_messages_all.return_value = [sample_messages[0]]
-        monkeypatch.setattr(cleanup, "BATCH_DELAY_SECONDS", 0)
+        from protonmail_organizer import batch
+
+        monkeypatch.setattr(batch, "BATCH_DELAY_SECONDS", 0)
 
         def no_prompt(*a, **k):
             raise AssertionError("confirm_action must not be called with assume_yes")

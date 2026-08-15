@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import re
-import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 import yaml
 
-from .client_ext import ProtonMailExt
+from .batch import batch_apply
+from .client_ext import ProtonMailExt, sender_address
 from .config import RULES_FILE, ensure_config_dir
 from .constants import (
     ARCHIVE,
-    BATCH_DELAY_SECONDS,
-    BATCH_SIZE,
     DESTRUCTIVE_ACTIONS,
     FREE_PLAN_MAX_FOLDERS,
     FREE_PLAN_MAX_LABELS,
@@ -81,7 +79,7 @@ def _get_rules_path(rules_file: Optional[str] = None) -> Path:
     return RULES_FILE
 
 
-def _load_rules(rules_file: Optional[str] = None) -> list:
+def load_rules(rules_file: Optional[str] = None) -> list:
     """Load and parse rules from YAML file."""
     path = _get_rules_path(rules_file)
     if not path.exists():
@@ -116,7 +114,7 @@ def init_rules() -> None:
 
 def list_rules(rules_file: Optional[str] = None) -> None:
     """Display all configured rules."""
-    rules = _load_rules(rules_file)
+    rules = load_rules(rules_file)
     if not rules:
         return
 
@@ -141,7 +139,7 @@ def validate_rules(
     rules_file: Optional[str] = None,
 ) -> bool:
     """Validate rules syntax and label references."""
-    rules = _load_rules(rules_file)
+    rules = load_rules(rules_file)
     if not rules:
         return False
 
@@ -243,7 +241,7 @@ def run_rules(
     folder: str = INBOX,
 ) -> None:
     """Run rules against the messages in a folder (default: Inbox)."""
-    rules = _load_rules(rules_file)
+    rules = load_rules(rules_file)
     if not rules:
         return
 
@@ -275,7 +273,7 @@ def run_rules(
         conditions = rule.get("conditions", {})
         actions = rule.get("actions", {})
 
-        matched = [m for m in messages if _matches_conditions(m, conditions)]
+        matched = [m for m in messages if matches_conditions(m, conditions)]
         if not matched:
             continue
 
@@ -302,7 +300,7 @@ def run_rules(
             continue
 
         total_matched += len(matched)
-        _apply_actions(client, matched, actions, label_map, source_folder=folder)
+        apply_actions(client, matched, actions, label_map, source_folder=folder)
 
     if total_matched == 0:
         print_info("No messages matched any rules.")
@@ -322,14 +320,13 @@ def _any(value, predicate) -> bool:
     return any(predicate(v) for v in _as_list(value))
 
 
-def _matches_conditions(msg: dict, conditions: dict) -> bool:
+def matches_conditions(msg: dict, conditions: dict) -> bool:
     """Check if a message matches all conditions (AND across keys).
 
     A condition value may be a scalar or a list; a list matches if ANY of its
     values match (OR within a single condition).
     """
-    sender = msg.get("Sender", {})
-    addr = sender.get("Address", "") if isinstance(sender, dict) else ""
+    addr = sender_address(msg)
     subject = msg.get("Subject", "")
     domain = addr.split("@")[-1] if "@" in addr else ""
     msg_time = msg.get("Time", 0)
@@ -379,7 +376,7 @@ def _matches_conditions(msg: dict, conditions: dict) -> bool:
     return True
 
 
-def _apply_actions(
+def apply_actions(
     client: ProtonMailExt,
     messages: list,
     actions: dict,
@@ -521,15 +518,6 @@ def _resolve_label(
 
 
 def _batch_operation(func, ids: list, description: str) -> None:
-    """Run a function in batches with delay; one failed batch doesn't stop the rest."""
-    failed = 0
-    for i in range(0, len(ids), BATCH_SIZE):
-        batch = ids[i : i + BATCH_SIZE]
-        try:
-            func(batch)
-        except Exception as e:
-            failed += len(batch)
-            print_error(f"  Batch failed ({description}): {e}")
-        if i + BATCH_SIZE < len(ids):
-            time.sleep(BATCH_DELAY_SECONDS)
+    """Run a function in batches; one failed batch doesn't stop the rest."""
+    failed = batch_apply(func, ids, description, progress=False)
     print_success(f"  {description}: {len(ids) - failed} message(s)")

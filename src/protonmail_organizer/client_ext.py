@@ -20,6 +20,19 @@ class MessageList(list):
     truncated: bool = False
 
 
+def sender_parts(msg: dict) -> tuple[str, str]:
+    """(name, address) from an API message dict ('' for absent or malformed parts)."""
+    sender = msg.get("Sender", {})
+    if not isinstance(sender, dict):
+        return "", ""
+    return sender.get("Name", ""), sender.get("Address", "")
+
+
+def sender_address(msg: dict) -> str:
+    """Sender address from an API message dict ('' if absent or malformed)."""
+    return sender_parts(msg)[1]
+
+
 class ProtonMailExt(ProtonMail):
     """ProtonMail client extended with label CRUD, search, and conversation label ops."""
 

@@ -8,7 +8,7 @@ from typing import Optional
 from rich.panel import Panel
 from rich.table import Table
 
-from .client_ext import ProtonMailExt
+from .client_ext import ProtonMailExt, sender_address
 from .config import RULES_FILE
 from .constants import INBOX
 from .display import (
@@ -17,7 +17,7 @@ from .display import (
     print_success,
     print_warning,
 )
-from .rules import _load_rules, _matches_conditions
+from .rules import load_rules, matches_conditions
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -51,9 +51,7 @@ def _fetch_inbox_messages(
 
 def _extract_sender(msg: dict) -> str:
     """Return the sender address from a message dict (lowercased)."""
-    sender = msg.get("Sender", {})
-    addr = sender.get("Address", "") if isinstance(sender, dict) else ""
-    return addr.lower()
+    return sender_address(msg).lower()
 
 
 def _extract_domain(address: str) -> str:
@@ -80,7 +78,7 @@ def rule_stats(
     2. Unmatched Senders  - senders that matched no rules, grouped by domain
     3. Summary panel      - totals and coverage percentage
     """
-    rules = _load_rules(rules_file)
+    rules = load_rules(rules_file)
     if not rules:
         return
 
@@ -107,7 +105,7 @@ def rule_stats(
         for rule in rules:
             name = rule.get("name", "Unnamed rule")
             conditions = rule.get("conditions", {})
-            if _matches_conditions(msg, conditions):
+            if matches_conditions(msg, conditions):
                 rule_matches[name].append(msg)
                 matched_ids.add(msg_id)
 
@@ -224,7 +222,7 @@ def suggest_rules(
     - ``sender_domain`` rule for domains with >= 3 unmatched messages
     - ``sender_is`` rule for specific senders with >= 2 unmatched messages
     """
-    rules = _load_rules(rules_file)
+    rules = load_rules(rules_file)
     if not rules:
         return
 
@@ -239,7 +237,7 @@ def suggest_rules(
     # Find messages that match NO rules
     unmatched: list[dict] = []
     for msg in messages:
-        if not any(_matches_conditions(msg, rule.get("conditions", {})) for rule in rules):
+        if not any(matches_conditions(msg, rule.get("conditions", {})) for rule in rules):
             unmatched.append(msg)
 
     if not unmatched:

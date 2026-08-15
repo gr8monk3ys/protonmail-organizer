@@ -8,10 +8,10 @@ from typing import Optional
 
 from rich.table import Table
 
-from .client_ext import ProtonMailExt
+from .client_ext import ProtonMailExt, sender_address
 from .constants import INBOX
 from .display import console, print_error, print_info, print_success
-from .rules import _apply_actions, _load_rules, _matches_conditions
+from .rules import apply_actions, load_rules, matches_conditions
 
 
 def watch_inbox(
@@ -26,7 +26,7 @@ def watch_inbox(
         interval: Seconds between polls.
         rules_file: Path to rules YAML (default: config rules file).
     """
-    rules = _load_rules(rules_file)
+    rules = load_rules(rules_file)
     if not rules:
         print_error("No rules loaded. Cannot watch.")
         return
@@ -102,7 +102,7 @@ def _poll_cycle(
         conditions = rule.get("conditions", {})
         actions = rule.get("actions", {})
 
-        matched = [m for m in new_messages if _matches_conditions(m, conditions)]
+        matched = [m for m in new_messages if matches_conditions(m, conditions)]
         if not matched:
             continue
 
@@ -112,7 +112,7 @@ def _poll_cycle(
             console.print(f"  [green]>[/green] [bold]{name}[/bold] → {addr} | {subject}")
 
         try:
-            _apply_actions(client, matched, actions, label_map)
+            apply_actions(client, matched, actions, label_map)
             for msg in matched:
                 addr, subject = _sender_and_subject(msg)
                 action_log.append({"time": now, "rule": name, "sender": addr, "subject": subject})
@@ -127,9 +127,7 @@ def _poll_cycle(
 
 def _sender_and_subject(msg: dict) -> tuple[str, str]:
     """Sender address and truncated subject for log lines."""
-    sender = msg.get("Sender", {})
-    addr = sender.get("Address", "") if isinstance(sender, dict) else ""
-    return addr, msg.get("Subject", "")[:50]
+    return sender_address(msg), msg.get("Subject", "")[:50]
 
 
 def _show_summary(action_log: list) -> None:

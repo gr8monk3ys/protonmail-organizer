@@ -212,3 +212,17 @@ class TestSearchTruncationSignal:
         c.search_messages = MagicMock(side_effect=[full, short])
         out = c.search_messages_all(max_pages=10, page_size=50)
         assert out.truncated is False
+
+
+class TestSenderAddress:
+    def test_extracts_address(self):
+        from protonmail_organizer.client_ext import sender_address
+
+        msg = {"Sender": {"Name": "Bot", "Address": "bot@example.com"}}
+        assert sender_address(msg) == "bot@example.com"
+
+    def test_malformed_sender_returns_empty(self):
+        from protonmail_organizer.client_ext import sender_address
+
+        assert sender_address({"Sender": "plainstring"}) == ""
+        assert sender_address({}) == ""

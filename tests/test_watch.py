@@ -23,7 +23,7 @@ DELETE_RULE = {
 
 class TestPollCycle:
     def test_groups_new_messages_per_rule(self, mock_client, monkeypatch):
-        """One _apply_actions call per rule per cycle, not per message.
+        """One apply_actions call per rule per cycle, not per message.
 
         Per-message calls would write one oplog entry each, flooding the
         50-entry undo ring during a busy watch session.
@@ -33,7 +33,7 @@ class TestPollCycle:
         calls = []
         monkeypatch.setattr(
             watch,
-            "_apply_actions",
+            "apply_actions",
             lambda client, msgs, actions, label_map, **kw: calls.append(list(msgs)),
         )
         mock_client.search_messages.return_value = [_newsletter("w1"), _newsletter("w2")]
@@ -49,7 +49,7 @@ class TestPollCycle:
         calls = []
         monkeypatch.setattr(
             watch,
-            "_apply_actions",
+            "apply_actions",
             lambda client, msgs, actions, label_map, **kw: calls.append(list(msgs)),
         )
         mock_client.search_messages.return_value = [_newsletter("w1")]

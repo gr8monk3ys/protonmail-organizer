@@ -134,3 +134,15 @@ class TestWritePrivate:
         write_private(p, "new")
         assert p.read_text() == "new"
         assert (p.stat().st_mode & 0o777) == 0o600
+
+
+class TestTruncate:
+    def test_short_text_unchanged(self):
+        from protonmail_organizer.display import truncate
+
+        assert truncate("hi", 10) == "hi"
+
+    def test_long_text_gets_ellipsis(self):
+        from protonmail_organizer.display import truncate
+
+        assert truncate("abcdefgh", 5) == "abcde..."
