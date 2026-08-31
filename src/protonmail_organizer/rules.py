@@ -3,34 +3,38 @@
 from __future__ import annotations
 
 import re
-import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 import yaml
 
-from .client_ext import ProtonMailExt
+from .batch import batch_apply
+from .client_ext import ProtonMailExt, sender_address
 from .config import RULES_FILE, ensure_config_dir
 from .constants import (
     ARCHIVE,
-    BATCH_DELAY_SECONDS,
-    BATCH_SIZE,
+    DESTRUCTIVE_ACTIONS,
+    FREE_PLAN_MAX_FOLDERS,
     FREE_PLAN_MAX_LABELS,
     INBOX,
     LABEL_TYPE_FOLDER,
     LABEL_TYPE_LABEL,
     STARRED,
     SYSTEM_LABELS,
+    TRASH,
 )
 from .display import (
+    confirm_action,
     console,
     message_table,
     print_error,
     print_info,
     print_success,
     print_warning,
+    warn_if_truncated,
 )
+from .oplog import record_operation
 
 EXAMPLE_RULES = """\
 # ProtonMail Organizer Rules
@@ -57,6 +61,7 @@ rules:
     actions:
       star: true
 
+  # "delete" moves messages to Trash (recoverable with 'pmo undo').
   - name: "Delete old newsletters"
     conditions:
       sender_contains: "newsletter"
@@ -74,7 +79,7 @@ def _get_rules_path(rules_file: Optional[str] = None) -> Path:
     return RULES_FILE
 
 
-def _load_rules(rules_file: Optional[str] = None) -> list:
+def load_rules(rules_file: Optional[str] = None) -> list:
     """Load and parse rules from YAML file."""
     path = _get_rules_path(rules_file)
     if not path.exists():
@@ -109,7 +114,7 @@ def init_rules() -> None:
 
 def list_rules(rules_file: Optional[str] = None) -> None:
     """Display all configured rules."""
-    rules = _load_rules(rules_file)
+    rules = load_rules(rules_file)
     if not rules:
         return
 
@@ -134,7 +139,7 @@ def validate_rules(
     rules_file: Optional[str] = None,
 ) -> bool:
     """Validate rules syntax and label references."""
-    rules = _load_rules(rules_file)
+    rules = load_rules(rules_file)
     if not rules:
         return False
 
@@ -147,6 +152,7 @@ def validate_rules(
 
     valid = True
     referenced_new_labels = set()
+    referenced_new_folders = set()
 
     for i, rule in enumerate(rules, 1):
         name = rule.get("name", f"Rule {i}")
@@ -193,31 +199,39 @@ def validate_rules(
                 print_error(f"Rule '{name}': unknown action '{key}'")
                 valid = False
 
-        # Check label references
-        for action_key in ("add_label", "remove_label", "move_to"):
+        # Check label/folder references. move_to creates folders, which have
+        # their own free-plan quota, separate from labels.
+        for action_key in ("add_label", "remove_label"):
             target = actions.get(action_key)
             if target and target.lower() not in all_names:
                 referenced_new_labels.add(target)
+        move_target = actions.get("move_to")
+        if move_target and move_target.lower() not in all_names:
+            referenced_new_folders.add(move_target)
 
-    # Check free-plan limits for new labels
-    new_label_count = len(referenced_new_labels)
-    if new_label_count > 0:
-        available_labels = FREE_PLAN_MAX_LABELS - len(user_labels)
-        if new_label_count > available_labels:
-            print_warning(
-                f"Rules reference {new_label_count} label(s) that don't exist yet: "
-                f"{referenced_new_labels}. Only {available_labels} more can be "
-                f"created on the free plan."
-            )
-        else:
-            print_info(
-                f"Rules reference {new_label_count} new label(s): {referenced_new_labels}. "
-                f"They will be created when rules run."
-            )
+    # Check free-plan limits per kind
+    _warn_quota(referenced_new_labels, "label", FREE_PLAN_MAX_LABELS - len(user_labels))
+    _warn_quota(referenced_new_folders, "folder", FREE_PLAN_MAX_FOLDERS - len(user_folders))
 
     if valid:
         print_success(f"All {len(rules)} rule(s) are valid.")
     return valid
+
+
+def _warn_quota(names: set, kind: str, available: int) -> None:
+    """Report referenced-but-missing labels/folders against the free-plan quota."""
+    if not names:
+        return
+    if len(names) > available:
+        print_warning(
+            f"Rules reference {len(names)} {kind}(s) that don't exist yet: {names}. "
+            f"Only {available} more can be created on the free plan."
+        )
+    else:
+        print_info(
+            f"Rules reference {len(names)} new {kind}(s): {names}. "
+            f"They will be created when rules run."
+        )
 
 
 def run_rules(
@@ -227,7 +241,7 @@ def run_rules(
     folder: str = INBOX,
 ) -> None:
     """Run rules against the messages in a folder (default: Inbox)."""
-    rules = _load_rules(rules_file)
+    rules = load_rules(rules_file)
     if not rules:
         return
 
@@ -239,6 +253,7 @@ def run_rules(
         print_warning(f"No messages in {folder_name}.")
         return
 
+    warn_if_truncated(messages)
     print_info(f"Evaluating {len(rules)} rule(s) against {len(messages)} message(s)...")
 
     # Build label name -> ID mapping
@@ -258,14 +273,14 @@ def run_rules(
         conditions = rule.get("conditions", {})
         actions = rule.get("actions", {})
 
-        matched = [m for m in messages if _matches_conditions(m, conditions)]
+        matched = [m for m in messages if matches_conditions(m, conditions)]
         if not matched:
             continue
 
-        total_matched += len(matched)
         console.print(f"\n[cyan]Rule '{name}':[/cyan] matched {len(matched)} message(s)")
 
         if dry_run:
+            total_matched += len(matched)
             console.print(
                 message_table(
                     matched[:10],
@@ -276,7 +291,16 @@ def run_rules(
                 console.print(f"[dim]  ...and {len(matched) - 10} more[/dim]")
             continue
 
-        _apply_actions(client, matched, actions, label_map, source_folder=folder)
+        destructive = any(actions.get(a) for a in DESTRUCTIVE_ACTIONS)
+        if destructive and not confirm_action(
+            f"move {len(matched)} message(s) matched by rule '{name}' to Trash",
+            len(matched),
+        ):
+            print_warning(f"Skipped rule '{name}'.")
+            continue
+
+        total_matched += len(matched)
+        apply_actions(client, matched, actions, label_map, source_folder=folder)
 
     if total_matched == 0:
         print_info("No messages matched any rules.")
@@ -296,14 +320,13 @@ def _any(value, predicate) -> bool:
     return any(predicate(v) for v in _as_list(value))
 
 
-def _matches_conditions(msg: dict, conditions: dict) -> bool:
+def matches_conditions(msg: dict, conditions: dict) -> bool:
     """Check if a message matches all conditions (AND across keys).
 
     A condition value may be a scalar or a list; a list matches if ANY of its
     values match (OR within a single condition).
     """
-    sender = msg.get("Sender", {})
-    addr = sender.get("Address", "") if isinstance(sender, dict) else ""
+    addr = sender_address(msg)
     subject = msg.get("Subject", "")
     domain = addr.split("@")[-1] if "@" in addr else ""
     msg_time = msg.get("Time", 0)
@@ -353,7 +376,7 @@ def _matches_conditions(msg: dict, conditions: dict) -> bool:
     return True
 
 
-def _apply_actions(
+def apply_actions(
     client: ProtonMailExt,
     messages: list,
     actions: dict,
@@ -365,20 +388,33 @@ def _apply_actions(
     source_folder is the folder the messages came from; ``move_to`` removes
     that label after filing into the target (so a move out of Archive removes
     Archive, not Inbox).
+
+    ``delete`` moves to Trash rather than hard-deleting, and folder moves are
+    recorded in the oplog, so everything a rule does is reversible via
+    ``pmo undo``.
     """
     ids = [m.get("ID", "") for m in messages]
-    source_name = SYSTEM_LABELS.get(source_folder, "source folder")
 
     for action, value in actions.items():
         try:
             if action == "delete" and value:
-                _batch_operation(client.delete_messages, ids, "Deleting")
+                _move_and_record(
+                    client,
+                    ids,
+                    TRASH,
+                    "Moving to Trash",
+                    source_folder,
+                    f"Rule moved {len(ids)} message(s) to Trash",
+                )
 
             elif action == "archive" and value:
-                _batch_operation(
-                    lambda batch: client.set_label_for_messages(ARCHIVE, batch),
+                _move_and_record(
+                    client,
                     ids,
+                    ARCHIVE,
                     "Archiving",
+                    source_folder,
+                    f"Rule archived {len(ids)} message(s)",
                 )
 
             elif action == "star" and value:
@@ -410,42 +446,67 @@ def _apply_actions(
                     )
 
             elif action == "move_to":
-                label_id = _resolve_label(client, value, label_map)
+                label_id = _resolve_label(client, value, label_map, label_type=LABEL_TYPE_FOLDER)
                 if label_id:
-                    # File into the target, then remove from the source folder.
-                    _batch_operation(
-                        lambda batch, lid=label_id: client.set_label_for_messages(lid, batch),
+                    _move_and_record(
+                        client,
                         ids,
+                        label_id,
                         f"Moving to '{value}'",
-                    )
-                    _batch_operation(
-                        lambda batch, sid=source_folder: client.unset_label_for_messages(
-                            sid, batch
-                        ),
-                        ids,
-                        f"Removing from {source_name}",
+                        source_folder,
+                        f"Rule moved {len(ids)} message(s) to '{value}'",
+                        unset_source=True,
                     )
 
         except Exception as e:
             print_error(f"Action '{action}' failed: {e}")
 
 
+def _move_and_record(
+    client: ProtonMailExt,
+    ids: list,
+    target_label: str,
+    verb: str,
+    source_folder: str,
+    description: str,
+    unset_source: bool = False,
+) -> None:
+    """File messages into target_label and log an undoable operation.
+
+    System folders (Trash/Archive) are exclusive server-side, so only moves
+    into custom folders need the explicit unset of the source folder.
+    """
+    _batch_operation(
+        lambda batch: client.set_label_for_messages(target_label, batch),
+        ids,
+        verb,
+    )
+    if unset_source:
+        source_name = SYSTEM_LABELS.get(source_folder, "source folder")
+        _batch_operation(
+            lambda batch: client.unset_label_for_messages(source_folder, batch),
+            ids,
+            f"Removing from {source_name}",
+        )
+    record_operation(description, ids, added_label=target_label, removed_label=source_folder)
+
+
 def _resolve_label(
     client: ProtonMailExt,
     name: str,
     label_map: dict,
+    label_type: int = LABEL_TYPE_LABEL,
 ) -> Optional[str]:
-    """Resolve a label name to ID, creating it if needed."""
+    """Resolve a label name to ID, creating it (as label_type) if needed."""
     label_id = label_map.get(name.lower())
     if label_id:
         return label_id
 
-    # Try to create the label
-    print_info(f"Creating label '{name}'...")
+    print_info(f"Creating '{name}'...")
     try:
         from .labels import create_label
 
-        result = create_label(client, name)
+        result = create_label(client, name, label_type=label_type)
         if result:
             new_id = result.get("ID", "")
             label_map[name.lower()] = new_id
@@ -457,10 +518,6 @@ def _resolve_label(
 
 
 def _batch_operation(func, ids: list, description: str) -> None:
-    """Run a function in batches with delay."""
-    for i in range(0, len(ids), BATCH_SIZE):
-        batch = ids[i : i + BATCH_SIZE]
-        func(batch)
-        if i + BATCH_SIZE < len(ids):
-            time.sleep(BATCH_DELAY_SECONDS)
-    print_success(f"  {description}: {len(ids)} message(s)")
+    """Run a function in batches; one failed batch doesn't stop the rest."""
+    failed = batch_apply(func, ids, description, progress=False)
+    print_success(f"  {description}: {len(ids) - failed} message(s)")

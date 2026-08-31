@@ -10,7 +10,7 @@ from typing import Optional
 from rich.panel import Panel
 from rich.table import Table
 
-from .client_ext import ProtonMailExt
+from .client_ext import ProtonMailExt, sender_address, sender_parts
 from .constants import INBOX, SYSTEM_LABELS
 from .display import (
     console,
@@ -140,9 +140,7 @@ def show_stats(client: ProtonMailExt) -> None:
     if msgs:
         sender_counts = Counter()
         for msg in msgs:
-            sender = msg.get("Sender", {})
-            addr = sender.get("Address", "unknown") if isinstance(sender, dict) else "unknown"
-            sender_counts[addr] += 1
+            sender_counts[sender_address(msg) or "unknown"] += 1
 
         table = Table(title="Top Senders (Inbox)", show_lines=False)
         table.add_column("Sender", style="cyan")
@@ -206,9 +204,7 @@ def digest_report(client: ProtonMailExt, days: int = 1) -> None:
     ]
 
     for msg in recent:
-        sender = msg.get("Sender", {})
-        addr = sender.get("Address", "") if isinstance(sender, dict) else ""
-        name = sender.get("Name", "") if isinstance(sender, dict) else ""
+        name, addr = sender_parts(msg)
 
         domain = addr.split("@")[-1] if "@" in addr else "unknown"
         domain_counts[domain] += 1

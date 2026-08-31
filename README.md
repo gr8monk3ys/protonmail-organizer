@@ -115,7 +115,7 @@ Bulk `cleanup old` / `cleanup newsletters` move messages to **Trash** by default
 and reversible:
 
 ```bash
-pmo undo            # reverse the most recent archive / move-to-Trash
+pmo undo            # reverse the most recent archive / move-to-Trash (confirms first)
 pmo undo --list     # show the recent operation history
 ```
 
@@ -230,11 +230,17 @@ Any text condition accepts a **list** of values, matching if *any* of them match
 
 **Actions:** `move_to`, `add_label`, `remove_label`, `mark_read`, `delete`, `archive`, `star`.
 
+`delete` moves messages to Trash (never a permanent delete), and destructive
+rule actions are recorded in the operation log — `pmo undo` reverses the most
+recent one. Non-dry runs of a `delete` rule ask for confirmation first.
+
 Run rules against any folder, not just the inbox: `pmo rules run --folder 6` (Archive).
 
 Time-based conditions like `older_than_days` only work with `pmo rules run` /
 `pmo watch` (they can't be expressed in Sieve), so `pmo filters push` will skip
-or partially compile those rules and tell you which.
+or partially compile those rules and tell you which. A rule that combines a
+runtime-only condition with `delete` is skipped entirely — dropping a condition
+would make the server-side filter discard more mail than the rule intended.
 
 ## Configuration & privacy
 
@@ -264,8 +270,14 @@ machine, and the egress acknowledgment is skipped automatically.
 
 Because this is an unofficial client and AI drafting sends data off-device, the
 first time you authenticate (and the first time you draft an AI reply) you are
-asked to acknowledge the risk once. The choice is saved in `consent.json`. For
-non-interactive use (scripts, CI), set `PMO_ACCEPT_RISKS=1` to accept up front.
+asked to acknowledge the risk once. The AI acknowledgment names the actual
+destination host and is stored **per destination** — acknowledging Anthropic
+never silently covers a different gateway. Choices are saved in `consent.json`.
+
+For non-interactive use (scripts, CI) the two risks are separate opt-ins:
+`PMO_ACCEPT_RISKS=1` accepts the unofficial-API risk, and
+`PMO_ACCEPT_AI_EGRESS=1` accepts sending mail content to the AI destination —
+so scripted cleanup never silently authorizes data egress.
 
 ### Troubleshooting
 

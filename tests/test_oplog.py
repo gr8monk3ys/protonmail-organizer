@@ -4,19 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from protonmail_organizer import oplog
 from protonmail_organizer.constants import ARCHIVE, INBOX, TRASH
-
-
-@pytest.fixture
-def oplog_file(tmp_path, monkeypatch):
-    """Redirect the operation log to a temp file."""
-    path = tmp_path / "operations.json"
-    monkeypatch.setattr(oplog, "OPLOG_FILE", path)
-    monkeypatch.setattr(oplog, "ensure_config_dir", lambda: tmp_path)
-    return path
 
 
 class TestRecordAndLoad:
@@ -44,7 +33,7 @@ class TestUndo:
         client = MagicMock()
         oplog.record_operation("Archived", ["a", "b"], added_label=ARCHIVE, removed_label=INBOX)
 
-        oplog.undo_last(client)
+        oplog.undo_last(client, assume_yes=True)
 
         # Restores the removed label (Inbox) and strips the added one (Archive).
         client.set_label_for_messages.assert_called_once_with(INBOX, ["a", "b"])
@@ -56,7 +45,7 @@ class TestUndo:
         client = MagicMock()
         oplog.record_operation("Trashed", ["x"], added_label=TRASH, removed_label=INBOX)
 
-        oplog.undo_last(client)
+        oplog.undo_last(client, assume_yes=True)
 
         client.set_label_for_messages.assert_called_once_with(INBOX, ["x"])
         client.unset_label_for_messages.assert_called_once_with(TRASH, ["x"])
@@ -65,7 +54,7 @@ class TestUndo:
         client = MagicMock()
         oplog.record_operation("Permanently deleted", ["a"], permanent=True)
 
-        oplog.undo_last(client)
+        oplog.undo_last(client, assume_yes=True)
 
         client.set_label_for_messages.assert_not_called()
         client.unset_label_for_messages.assert_not_called()
@@ -74,7 +63,7 @@ class TestUndo:
 
     def test_undo_empty_log(self, oplog_file):
         client = MagicMock()
-        oplog.undo_last(client)
+        oplog.undo_last(client, assume_yes=True)
         client.set_label_for_messages.assert_not_called()
 
     def test_undo_only_added_label(self, oplog_file):
@@ -82,7 +71,37 @@ class TestUndo:
         client = MagicMock()
         oplog.record_operation("Labeled", ["a"], added_label="99")
 
-        oplog.undo_last(client)
+        oplog.undo_last(client, assume_yes=True)
 
         client.unset_label_for_messages.assert_called_once_with("99", ["a"])
         client.set_label_for_messages.assert_not_called()
+
+
+class TestUndoConfirmation:
+    def test_declined_undo_changes_nothing(self, oplog_file, monkeypatch):
+        oplog.record_operation("Archived 1", ["a"], added_label=ARCHIVE, removed_label=INBOX)
+        client = MagicMock()
+        monkeypatch.setattr(oplog.click, "confirm", lambda *a, **k: False)
+
+        oplog.undo_last(client)
+
+        client.set_label_for_messages.assert_not_called()
+        client.unset_label_for_messages.assert_not_called()
+        assert len(oplog._load()) == 1
+
+    def test_assume_yes_undoes_without_prompt(self, oplog_file, monkeypatch):
+        oplog.record_operation("Archived 1", ["a"], added_label=ARCHIVE, removed_label=INBOX)
+        client = MagicMock()
+
+        def no_prompt(*a, **k):
+            raise AssertionError("must not prompt with assume_yes")
+
+        monkeypatch.setattr(oplog.click, "confirm", no_prompt)
+        oplog.undo_last(client, assume_yes=True)
+        assert oplog._load() == []
+
+
+class TestOplogFilePerms:
+    def test_oplog_written_owner_only(self, oplog_file):
+        oplog.record_operation("x", ["a"])
+        assert (oplog_file.stat().st_mode & 0o777) == 0o600

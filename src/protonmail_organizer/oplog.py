@@ -14,15 +14,16 @@ Stored at ~/.config/protonmail-organizer/operations.json (mode 0600).
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
 from typing import Optional
 
+import click
 from rich.table import Table
 
+from .batch import batch_apply
 from .client_ext import ProtonMailExt
-from .config import CONFIG_DIR, ensure_config_dir
-from .constants import BATCH_DELAY_SECONDS, BATCH_SIZE, SYSTEM_LABELS
+from .config import CONFIG_DIR, ensure_config_dir, write_private
+from .constants import SYSTEM_LABELS
 from .display import console, print_error, print_info, print_success, print_warning
 
 OPLOG_FILE = CONFIG_DIR / "operations.json"
@@ -43,8 +44,7 @@ def _load() -> list:
 def _save(ops: list) -> None:
     """Persist the operation log with restrictive permissions."""
     ensure_config_dir()
-    OPLOG_FILE.write_text(json.dumps(ops[-MAX_OPS:], indent=2))
-    os.chmod(OPLOG_FILE, 0o600)
+    write_private(OPLOG_FILE, json.dumps(ops[-MAX_OPS:], indent=2))
 
 
 def record_operation(
@@ -107,8 +107,8 @@ def list_operations() -> None:
     print_info("Run 'pmo undo' to reverse the most recent undoable operation.")
 
 
-def undo_last(client: ProtonMailExt) -> None:
-    """Reverse the most recent logged operation."""
+def undo_last(client: ProtonMailExt, assume_yes: bool = False) -> None:
+    """Reverse the most recent logged operation (confirming first unless assume_yes)."""
     ops = _load()
     if not ops:
         print_warning("Nothing to undo.")
@@ -126,31 +126,33 @@ def undo_last(client: ProtonMailExt) -> None:
     added = op.get("added_label")
     removed = op.get("removed_label")
 
+    if not assume_yes and not click.confirm(
+        f"Undo '{desc}' ({len(ids)} message(s))?", default=False
+    ):
+        print_warning("Cancelled.")
+        return
+
     print_info(f"Undoing: {desc} ({len(ids)} message(s))...")
-    try:
-        # Restore the removed label first (re-files into the source folder),
-        # then strip the label the operation added.
-        if removed:
-            _batch(lambda b: client.set_label_for_messages(removed, b), ids)
-        if added:
-            _batch(lambda b: client.unset_label_for_messages(added, b), ids)
-    except Exception as e:
-        print_error(f"Undo failed: {e}")
+    # Restore the removed label first (re-files into the source folder),
+    # then strip the label the operation added.
+    failed = 0
+    if removed:
+        failed = batch_apply(
+            lambda b: client.set_label_for_messages(removed, b), ids, "Restoring", progress=False
+        )
+    if not failed and added:
+        failed = batch_apply(
+            lambda b: client.unset_label_for_messages(added, b), ids, "Unlabeling", progress=False
+        )
+    if failed:
+        print_error(
+            f"Undo incomplete ({failed} message(s) failed) — keeping the operation in the log."
+        )
         return
 
     ops.pop()
     _save(ops)
     print_success(f"Undid: {desc}")
-
-
-def _batch(func, ids: list) -> None:
-    """Apply func to message IDs in batches with a small delay."""
-    import time
-
-    for i in range(0, len(ids), BATCH_SIZE):
-        func(ids[i : i + BATCH_SIZE])
-        if i + BATCH_SIZE < len(ids):
-            time.sleep(BATCH_DELAY_SECONDS)
 
 
 def label_name(label_id: Optional[str]) -> str:

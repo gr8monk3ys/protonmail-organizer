@@ -194,3 +194,35 @@ class TestGetMessage:
         out = c.get_message("m1")
         c._get.assert_called_once_with(BASE, "mail/v4/messages/m1")
         assert out["Subject"] == "Hi"
+
+
+class TestSearchTruncationSignal:
+    def test_search_all_flags_truncation_at_max_pages(self):
+        c = make_client()
+        full = [{"ID": str(i)} for i in range(50)]
+        c.search_messages = MagicMock(return_value=full)
+        out = c.search_messages_all(max_pages=2, page_size=50)
+        assert len(out) == 100
+        assert out.truncated is True
+
+    def test_search_all_not_truncated_on_short_last_page(self):
+        c = make_client()
+        full = [{"ID": str(i)} for i in range(50)]
+        short = [{"ID": "last"}]
+        c.search_messages = MagicMock(side_effect=[full, short])
+        out = c.search_messages_all(max_pages=10, page_size=50)
+        assert out.truncated is False
+
+
+class TestSenderAddress:
+    def test_extracts_address(self):
+        from protonmail_organizer.client_ext import sender_address
+
+        msg = {"Sender": {"Name": "Bot", "Address": "bot@example.com"}}
+        assert sender_address(msg) == "bot@example.com"
+
+    def test_malformed_sender_returns_empty(self):
+        from protonmail_organizer.client_ext import sender_address
+
+        assert sender_address({"Sender": "plainstring"}) == ""
+        assert sender_address({}) == ""

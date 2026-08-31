@@ -22,9 +22,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from . import config
-from .client_ext import ProtonMailExt
+from .client_ext import ProtonMailExt, sender_parts
 from .constants import INBOX
-from .display import console, print_error, print_info, print_success, print_warning
+from .display import console, print_error, print_info, print_success, print_warning, truncate
 from .style_profile import get_style_profile
 
 _ANTHROPIC_ALIASES = {"anthropic", "claude"}
@@ -61,10 +61,17 @@ def _backend_is_remote(backend: str) -> bool:
     return True
 
 
+def _egress_destination(backend: str) -> str:
+    """The hostname mail content is sent to, for the consent prompt."""
+    if backend in _ANTHROPIC_ALIASES:
+        from .consent import ANTHROPIC_HOST
+
+        return ANTHROPIC_HOST
+    return urlparse(config.AI_BASE_URL).hostname or config.AI_BASE_URL
+
+
 def _build_user_message(message: dict, body: str, context: Optional[str]) -> str:
-    sender = message.get("Sender", {})
-    sender_name = sender.get("Name", "") if isinstance(sender, dict) else ""
-    sender_addr = sender.get("Address", "") if isinstance(sender, dict) else ""
+    sender_name, sender_addr = sender_parts(message)
     subject = message.get("Subject", "(no subject)")
     user_msg = (
         "Reply to this email:\n"
@@ -114,7 +121,7 @@ def generate_draft(
     if _backend_is_remote(backend):
         from .consent import require_ai_egress_ack
 
-        if not require_ai_egress_ack():
+        if not require_ai_egress_ack(_egress_destination(backend)):
             print_warning("AI reply cancelled (data-sharing not acknowledged).")
             return ""
 
@@ -189,7 +196,17 @@ def _generate_local(system_prompt: str, user_msg: str, model: str) -> str:
     try:
         return (data["choices"][0]["message"]["content"] or "").strip()
     except (KeyError, IndexError, TypeError):
-        print_error(f"Unexpected response from local model at {url}: {data!r}")
+        # Don't echo the body: it may contain generated reply text derived
+        # from the user's mail. Keys describe the shape without the content.
+        shape = list(data)[:5] if isinstance(data, dict) else type(data).__name__
+        print_error(
+            f"Unexpected response shape from local model at {url} (got: {shape}). "
+            "Set PMO_DEBUG=1 to inspect the raw response."
+        )
+        from .display import debug_enabled
+
+        if debug_enabled():
+            console.print(f"[dim]{str(data)[:500]}[/dim]")
         return ""
 
 
@@ -233,7 +250,7 @@ def respond_to_message(
         Panel(
             f"[cyan]From:[/cyan] {sender_str}\n"
             f"[cyan]Subject:[/cyan] {subject}\n\n"
-            f"{_truncate(body, 500)}",
+            f"{truncate(body, 500)}",
             title="Replying to",
             border_style="blue",
         )
@@ -278,9 +295,7 @@ def respond_interactive(
     table.add_column("Subject", style="white")
 
     for i, msg in enumerate(messages, 1):
-        sender = msg.get("Sender", {})
-        name = sender.get("Name", "") if isinstance(sender, dict) else ""
-        addr = sender.get("Address", "") if isinstance(sender, dict) else ""
+        name, addr = sender_parts(msg)
         from_str = name if name else addr
         subject = msg.get("Subject", "(no subject)")
         table.add_row(str(i), from_str, subject)
@@ -515,7 +530,7 @@ Rules:
     if samples:
         prompt += "\n\nExamples of their actual emails (for tone reference):"
         for i, sample in enumerate(samples[:3], 1):
-            truncated = sample[:300] + "..." if len(sample) > 300 else sample
+            truncated = truncate(sample, 300)
             prompt += f"\n\nExample {i}:\n{truncated}"
 
     return prompt
@@ -547,7 +562,7 @@ def _format_reply_html(draft_body: str, original_msg, plain_body: str) -> str:
     when = datetime.fromtimestamp(msg_time).strftime("%a, %d %b %Y at %H:%M") if msg_time else ""
     attribution = f"On {when}, {who} wrote:" if when else f"{who} wrote:"
 
-    quoted = html.escape(_truncate(plain_body.strip(), 5000)).replace("\n", "<br>\n")
+    quoted = html.escape(truncate(plain_body.strip(), 5000)).replace("\n", "<br>\n")
 
     return (
         f"{draft_html}<br><br>"
@@ -556,10 +571,3 @@ def _format_reply_html(draft_body: str, original_msg, plain_body: str) -> str:
         f'style="margin:0 0 0 0.8ex; border-left:2px solid #ccc; padding-left:1ex;">'
         f"{quoted}</blockquote>"
     )
-
-
-def _truncate(text: str, max_len: int) -> str:
-    """Truncate text with ellipsis."""
-    if len(text) <= max_len:
-        return text
-    return text[:max_len] + "..."

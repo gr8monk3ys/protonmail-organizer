@@ -17,6 +17,7 @@ from rich.table import Table
 
 from .client_ext import ProtonMailExt
 from .config import RULES_FILE
+from .constants import DESTRUCTIVE_ACTIONS
 from .display import console, debug_enabled, print_error, print_info, print_success, print_warning
 
 # Conditions that require runtime (time-based) — can't be expressed in Sieve
@@ -148,6 +149,40 @@ def push_rules(client: ProtonMailExt, rules_file: Optional[str] = None) -> None:
         _suggest_manual_paste(sieve)
 
 
+def update_filter_from_rules(
+    client: ProtonMailExt,
+    filter_id: str,
+    rules_file: Optional[str] = None,
+    name: Optional[str] = None,
+    assume_yes: bool = False,
+) -> None:
+    """Recompile YAML rules and overwrite an existing server-side filter."""
+    sieve = _compile_from_file(rules_file, client=client)
+    if not sieve:
+        return
+
+    console.print(Syntax(sieve, "text", theme="monokai", line_numbers=True))
+
+    if not assume_yes:
+        confirm = (
+            console.input(
+                f"\n[yellow]Overwrite server-side filter {filter_id} with this Sieve? "
+                "(y/N): [/yellow]"
+            )
+            .strip()
+            .lower()
+        )
+        if confirm != "y":
+            print_warning("Cancelled.")
+            return
+
+    try:
+        client.update_filter(filter_id, sieve, name=name)
+        print_success(f"Updated filter {filter_id}")
+    except Exception as e:
+        print_error(f"Failed to update filter: {e}")
+
+
 def delete_filter(
     client: ProtonMailExt, filter_id: Optional[str] = None, delete_all: bool = False
 ) -> None:
@@ -227,6 +262,15 @@ def compile_rules_to_sieve(rules: list, label_map: dict | None = None) -> str:
             continue
 
         if runtime_conditions:
+            # Dropping a condition from an AND widens the match. That is
+            # tolerable for reversible actions, but a destructive action
+            # compiled against a wider match would discard mail the rule
+            # never intended to touch — skip the whole rule instead.
+            if any(actions.get(a) for a in DESTRUCTIVE_ACTIONS):
+                skipped.append(
+                    (name, f"runtime-only conditions {runtime_conditions} + destructive action")
+                )
+                continue
             skipped.append((name, f"partial — skipping conditions: {runtime_conditions}"))
 
         # Build Sieve condition
@@ -274,7 +318,7 @@ def compile_rules_to_sieve(rules: list, label_map: dict | None = None) -> str:
 
     # Show skipped rules
     if skipped:
-        print_warning(f"\nSkipped {len(skipped)} rule(s) (runtime-only conditions):")
+        print_warning(f"\nSkipped or partially compiled {len(skipped)} rule(s):")
         for name, reason in skipped:
             print_info(f"  - {name}: {reason}")
 
