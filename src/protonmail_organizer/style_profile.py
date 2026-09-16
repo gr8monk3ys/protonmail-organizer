@@ -9,7 +9,6 @@ when generating draft replies.
 from __future__ import annotations
 
 import json
-import os
 import re
 from collections import Counter
 from typing import Optional
@@ -17,9 +16,9 @@ from typing import Optional
 from rich.table import Table
 
 from .client_ext import ProtonMailExt
-from .config import STYLE_PROFILE_FILE, ensure_config_dir
+from .config import STYLE_PROFILE_FILE, ensure_config_dir, write_private
 from .constants import ALL_SENT
-from .display import console, debug_enabled, print_info, print_success, print_warning
+from .display import console, debug_enabled, print_info, print_success, print_warning, truncate
 
 
 def build_style_profile(client: ProtonMailExt, sample_count: int = 50) -> dict:
@@ -134,10 +133,9 @@ def build_style_profile(client: ProtonMailExt, sample_count: int = 50) -> dict:
         "emails_analyzed": len(bodies),
     }
 
-    # Save profile with restrictive permissions
+    # Save profile with restrictive permissions from the moment it exists
     ensure_config_dir()
-    STYLE_PROFILE_FILE.write_text(json.dumps(profile, indent=2))
-    os.chmod(STYLE_PROFILE_FILE, 0o600)  # owner read/write only
+    write_private(STYLE_PROFILE_FILE, json.dumps(profile, indent=2))
     print_success(f"Style profile saved to {STYLE_PROFILE_FILE}")
     print_success(f"Analyzed {len(bodies)} emails, avg {round(avg_length)} words each.")
     print_info(
@@ -325,9 +323,7 @@ def _truncate_to_sentences(text: str, max_sentences: int = 3) -> str:
         result = " ".join(sentences[:max_sentences])
 
     # Hard cap at 200 chars as additional safety
-    if len(result) > 200:
-        result = result[:200] + "..."
-    return result
+    return truncate(result, 200)
 
 
 def _describe_punctuation(excl_ratio: float) -> str:

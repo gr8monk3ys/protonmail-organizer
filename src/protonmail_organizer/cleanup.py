@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import re
-import time
 from datetime import datetime, timedelta
 
-from .client_ext import ProtonMailExt
+from .batch import batch_apply
+from .client_ext import ProtonMailExt, sender_address, sender_parts
 from .constants import (
     ARCHIVE,
-    BATCH_DELAY_SECONDS,
-    BATCH_SIZE,
     INBOX,
     SYSTEM_LABELS,
     TRASH,
@@ -20,11 +18,10 @@ from .display import (
     console,
     debug_enabled,
     message_table,
-    print_error,
     print_info,
     print_success,
     print_warning,
-    progress_context,
+    warn_if_truncated,
 )
 from .oplog import record_operation
 
@@ -35,6 +32,7 @@ def delete_old_messages(
     folder: str = INBOX,
     dry_run: bool = False,
     permanent: bool = False,
+    assume_yes: bool = False,
 ) -> None:
     """Delete messages older than N days. Moves to Trash unless permanent."""
     cutoff = int((datetime.now() - timedelta(days=days)).timestamp())
@@ -49,14 +47,16 @@ def delete_old_messages(
         print_warning("No messages found matching criteria.")
         return
 
+    warn_if_truncated(messages)
     console.print(message_table(messages, title=f"Messages to {verb} ({len(messages)})"))
 
-    if not confirm_action(
-        f"{verb} {len(messages)} messages from {folder_name}", len(messages), dry_run
-    ):
-        if not dry_run:
-            print_warning("Cancelled.")
-        return
+    if dry_run or not assume_yes:
+        if not confirm_action(
+            f"{verb} {len(messages)} messages from {folder_name}", len(messages), dry_run
+        ):
+            if not dry_run:
+                print_warning("Cancelled.")
+            return
 
     if permanent:
         ids = _batch_delete(client, messages)
@@ -89,6 +89,7 @@ def archive_by_sender(
         print_warning(f"No messages from '{pattern}' found in Inbox.")
         return
 
+    warn_if_truncated(messages)
     console.print(message_table(messages, title=f"Messages to archive ({len(messages)})"))
 
     if not confirm_action(
@@ -112,11 +113,13 @@ def handle_newsletters(
     dry_run: bool = False,
     do_delete: bool = False,
     permanent: bool = False,
+    assume_yes: bool = False,
 ) -> None:
     """Detect newsletters and optionally remove them (to Trash unless permanent)."""
     print_info("Scanning inbox for newsletters...")
 
     messages = client.search_messages_all(label_id=INBOX)
+    warn_if_truncated(messages)
     newsletters = [m for m in messages if _is_newsletter(m)]
 
     if not newsletters:
@@ -130,10 +133,11 @@ def handle_newsletters(
         return
 
     verb = "permanently delete" if permanent else "move to Trash"
-    if not confirm_action(f"{verb} detected newsletters", len(newsletters), dry_run):
-        if not dry_run:
-            print_warning("Cancelled.")
-        return
+    if dry_run or not assume_yes:
+        if not confirm_action(f"{verb} detected newsletters", len(newsletters), dry_run):
+            if not dry_run:
+                print_warning("Cancelled.")
+            return
 
     if permanent:
         ids = _batch_delete(client, newsletters)
@@ -163,6 +167,8 @@ def empty_folder(
         print_warning(f"{folder_name} is already empty.")
         return
 
+    warn_if_truncated(messages)
+
     if not skip_confirm:
         if not confirm_action(f"permanently delete all from {folder_name}", len(messages)):
             print_warning("Cancelled.")
@@ -183,42 +189,18 @@ def _ids_of(messages: list) -> list:
 def _batch_delete(client: ProtonMailExt, messages: list) -> list:
     """Permanently delete messages in batches. Returns the affected IDs."""
     ids = _ids_of(messages)
-    total = len(ids)
-
-    with progress_context() as progress:
-        task = progress.add_task("Deleting...", total=total)
-        for i in range(0, total, BATCH_SIZE):
-            batch = ids[i : i + BATCH_SIZE]
-            try:
-                client.delete_messages(batch)
-            except Exception as e:
-                print_error(f"Batch delete failed: {e}")
-            progress.update(task, advance=len(batch))
-            if i + BATCH_SIZE < total:
-                time.sleep(BATCH_DELAY_SECONDS)
-
-    print_success(f"Deleted {total} messages.")
+    failed = batch_apply(client.delete_messages, ids, "Deleting")
+    print_success(f"Deleted {len(ids) - failed} messages.")
     return ids
 
 
 def _batch_trash(client: ProtonMailExt, messages: list) -> list:
     """Move messages to Trash (recoverable) in batches. Returns the affected IDs."""
     ids = _ids_of(messages)
-    total = len(ids)
-
-    with progress_context() as progress:
-        task = progress.add_task("Moving to Trash...", total=total)
-        for i in range(0, total, BATCH_SIZE):
-            batch = ids[i : i + BATCH_SIZE]
-            try:
-                client.set_label_for_messages(TRASH, batch)
-            except Exception as e:
-                print_error(f"Batch trash failed: {e}")
-            progress.update(task, advance=len(batch))
-            if i + BATCH_SIZE < total:
-                time.sleep(BATCH_DELAY_SECONDS)
-
-    print_success(f"Moved {total} messages to Trash. Run 'pmo undo' to restore.")
+    failed = batch_apply(
+        lambda chunk: client.set_label_for_messages(TRASH, chunk), ids, "Moving to Trash"
+    )
+    print_success(f"Moved {len(ids) - failed} messages to Trash. Run 'pmo undo' to restore.")
     return ids
 
 
@@ -230,21 +212,12 @@ def _batch_label(
 ) -> list:
     """Apply a label to messages in batches. Returns the affected IDs."""
     ids = _ids_of(messages)
-    total = len(ids)
-
-    with progress_context() as progress:
-        task = progress.add_task(f"{action.capitalize()}ing...", total=total)
-        for i in range(0, total, BATCH_SIZE):
-            batch = ids[i : i + BATCH_SIZE]
-            try:
-                client.set_label_for_messages(label_id, batch)
-            except Exception as e:
-                print_error(f"Batch {action} failed: {e}")
-            progress.update(task, advance=len(batch))
-            if i + BATCH_SIZE < total:
-                time.sleep(BATCH_DELAY_SECONDS)
-
-    print_success(f"{action.capitalize()}d {total} messages.")
+    failed = batch_apply(
+        lambda chunk: client.set_label_for_messages(label_id, chunk),
+        ids,
+        action.capitalize() + "ing",
+    )
+    print_success(f"{action.capitalize()}d {len(ids) - failed} messages.")
     return ids
 
 
@@ -322,9 +295,7 @@ def find_unsubscribe_links(client: ProtonMailExt, limit: int = 50) -> None:
                 unsub = match.group(1).strip()
 
         if unsub:
-            sender = msg_summary.get("Sender", {})
-            addr = sender.get("Address", "") if isinstance(sender, dict) else ""
-            name = sender.get("Name", "") if isinstance(sender, dict) else ""
+            name, addr = sender_parts(msg_summary)
 
             # Extract URLs from the header value
             urls = re.findall(r"<(https?://[^>]+)>", unsub)
@@ -373,8 +344,7 @@ def find_unsubscribe_links(client: ProtonMailExt, limit: int = 50) -> None:
 
 def _is_newsletter(msg: dict) -> bool:
     """Heuristic: check if a message looks like a newsletter."""
-    sender = msg.get("Sender", {})
-    addr = sender.get("Address", "") if isinstance(sender, dict) else ""
+    addr = sender_address(msg)
     subject = msg.get("Subject", "")
 
     addr_lower = addr.lower()

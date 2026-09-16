@@ -84,6 +84,28 @@ def stats_panel(stats: dict) -> Panel:
     return Panel("\n".join(lines), title="Account Stats", border_style="blue")
 
 
+def truncate(text: str, max_len: int) -> str:
+    """Truncate text with ellipsis."""
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "..."
+
+
+def warn_if_truncated(messages) -> bool:
+    """Warn when a capped search returned only part of the matching messages.
+
+    Reads the ``truncated`` flag set by ``search_messages_all`` when it stops
+    at its page cap. Returns True if a warning was shown.
+    """
+    if getattr(messages, "truncated", False):
+        print_warning(
+            f"Search hit its page cap — only {len(messages)} message(s) were fetched "
+            "and more messages match. Re-run afterwards to process the rest."
+        )
+        return True
+    return False
+
+
 def confirm_action(message: str, count: int, dry_run: bool = False) -> bool:
     """Ask for confirmation before destructive action. Auto-yes in dry_run mode."""
     if dry_run:
@@ -93,7 +115,7 @@ def confirm_action(message: str, count: int, dry_run: bool = False) -> bool:
     return console.input("[yellow]Proceed? (y/N): [/yellow]").strip().lower() == "y"
 
 
-def progress_context(description: str = "Processing..."):
+def progress_context():
     """Return a Rich progress context manager."""
     return Progress(
         SpinnerColumn(),

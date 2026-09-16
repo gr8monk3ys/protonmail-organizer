@@ -65,10 +65,13 @@ def interactive_login(client: Optional[ProtonMailExt] = None) -> ProtonMailExt:
         console.print(f"[red]Login failed: {e}[/red]")
         sys.exit(1)
 
-    # Save session with restrictive permissions
+    # Pre-create the session file owner-only so the library's write to it is
+    # never world-readable, even briefly (touch mode applies only at creation;
+    # open('wb') on an existing inode keeps its permissions).
     ensure_config_dir()
+    SESSION_FILE.touch(mode=0o600, exist_ok=True)
     client.save_session(str(SESSION_FILE))
-    os.chmod(SESSION_FILE, 0o600)  # owner read/write only
+    os.chmod(SESSION_FILE, 0o600)  # tighten pre-existing files from old versions
     console.print("[green]Logged in and session saved.[/green]")
     return client
 

@@ -68,6 +68,35 @@ class TestWrappers:
         assert consent.has_consent(consent.UNOFFICIAL_USE) is True
 
     def test_ai_egress_wrapper_uses_its_key(self, consent_file, monkeypatch):
-        monkeypatch.setenv(consent.ACCEPT_ENV, "1")
+        monkeypatch.setenv(consent.AI_EGRESS_ENV, "1")
         assert consent.require_ai_egress_ack() is True
         assert consent.has_consent(consent.AI_EGRESS) is True
+
+
+class TestEgressConsentIsolation:
+    """AI egress needs its own opt-in, keyed to where the data actually goes."""
+
+    def test_accept_risks_env_does_not_cover_ai_egress(self, consent_file, monkeypatch):
+        monkeypatch.setenv(consent.ACCEPT_ENV, "1")
+        assert consent.require_ai_egress_ack() is False
+
+    def test_dedicated_env_grants_ai_egress(self, consent_file, monkeypatch):
+        monkeypatch.setenv(consent.AI_EGRESS_ENV, "1")
+        assert consent.require_ai_egress_ack() is True
+
+    def test_remote_destination_gets_its_own_key(self, consent_file, monkeypatch):
+        monkeypatch.setenv(consent.AI_EGRESS_ENV, "1")
+        assert consent.require_ai_egress_ack("gateway.example.com") is True
+        assert consent.has_consent("ai_egress:gateway.example.com")
+        # An ack for one gateway must not silently cover Anthropic or others.
+        assert not consent.has_consent(consent.AI_EGRESS)
+
+    def test_details_name_the_destination(self, consent_file, monkeypatch, capsys):
+        monkeypatch.setenv(consent.AI_EGRESS_ENV, "1")
+        consent.require_ai_egress_ack("gateway.example.com")
+        assert "gateway.example.com" in capsys.readouterr().out
+
+    def test_consent_file_is_owner_only(self, consent_file, monkeypatch):
+        monkeypatch.setenv(consent.ACCEPT_ENV, "1")
+        consent.require_unofficial_use_ack()
+        assert (consent_file.stat().st_mode & 0o777) == 0o600

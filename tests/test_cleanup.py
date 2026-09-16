@@ -144,3 +144,41 @@ class TestIsNewsletter:
             "Subject": "",
         }
         assert _is_newsletter(msg) is False
+
+
+class TestAssumeYes:
+    """--yes must bypass the prompt on permanent-capable cleanup commands."""
+
+    def test_delete_old_assume_yes_skips_prompt(
+        self, mock_client, sample_messages, monkeypatch, oplog_file
+    ):
+        from protonmail_organizer import cleanup
+
+        mock_client.search_messages_all.return_value = sample_messages[:2]
+        from protonmail_organizer import batch
+
+        monkeypatch.setattr(batch, "BATCH_DELAY_SECONDS", 0)
+
+        def no_prompt(*a, **k):
+            raise AssertionError("confirm_action must not be called with assume_yes")
+
+        monkeypatch.setattr(cleanup, "confirm_action", no_prompt)
+        cleanup.delete_old_messages(mock_client, days=30, assume_yes=True)
+        mock_client.set_label_for_messages.assert_called()
+
+    def test_newsletters_assume_yes_skips_prompt(
+        self, mock_client, sample_messages, monkeypatch, oplog_file
+    ):
+        from protonmail_organizer import cleanup
+
+        mock_client.search_messages_all.return_value = [sample_messages[0]]
+        from protonmail_organizer import batch
+
+        monkeypatch.setattr(batch, "BATCH_DELAY_SECONDS", 0)
+
+        def no_prompt(*a, **k):
+            raise AssertionError("confirm_action must not be called with assume_yes")
+
+        monkeypatch.setattr(cleanup, "confirm_action", no_prompt)
+        cleanup.handle_newsletters(mock_client, do_delete=True, assume_yes=True)
+        mock_client.set_label_for_messages.assert_called()

@@ -14,6 +14,25 @@ from .constants import LABEL_TYPE_LABEL
 BASE = "mail"
 
 
+class MessageList(list):
+    """Message search results; truncated=True means the page cap cut them off."""
+
+    truncated: bool = False
+
+
+def sender_parts(msg: dict) -> tuple[str, str]:
+    """(name, address) from an API message dict ('' for absent or malformed parts)."""
+    sender = msg.get("Sender", {})
+    if not isinstance(sender, dict):
+        return "", ""
+    return sender.get("Name", ""), sender.get("Address", "")
+
+
+def sender_address(msg: dict) -> str:
+    """Sender address from an API message dict ('' if absent or malformed)."""
+    return sender_parts(msg)[1]
+
+
 class ProtonMailExt(ProtonMail):
     """ProtonMail client extended with label CRUD, search, and conversation label ops."""
 
@@ -180,13 +199,19 @@ class ProtonMailExt(ProtonMail):
         data = response.json()
         return data.get("Messages", [])
 
-    def search_messages_all(self, max_pages: int = 100, **kwargs) -> list:
+    def search_messages_all(self, max_pages: int = 100, **kwargs) -> "MessageList":
         """Search messages across all pages. Same args as search_messages.
 
         Args:
             max_pages: Safety limit on number of pages to fetch (default: 100).
+
+        Returns:
+            A MessageList; its ``truncated`` attribute is True when the
+            max_pages cap stopped the search before results were exhausted,
+            meaning more messages match than were returned. Callers doing
+            bulk mutations should surface that (see display.warn_if_truncated).
         """
-        all_messages = []
+        all_messages = MessageList()
         page = 0
         page_size = kwargs.get("page_size", 50)
         while page < max_pages:
@@ -197,6 +222,8 @@ class ProtonMailExt(ProtonMail):
             if len(batch) < page_size:
                 break  # last page
             page += 1
+        else:
+            all_messages.truncated = True
         return all_messages
 
     # --- Conversation Label Operations ---

@@ -130,6 +130,17 @@ def sample_rules():
 
 
 @pytest.fixture
+def oplog_file(tmp_path, monkeypatch):
+    """Redirect the operation log to a temp file (never the real user oplog)."""
+    from protonmail_organizer import oplog
+
+    path = tmp_path / "operations.json"
+    monkeypatch.setattr(oplog, "OPLOG_FILE", path)
+    monkeypatch.setattr(oplog, "ensure_config_dir", lambda: tmp_path)
+    return path
+
+
+@pytest.fixture
 def tmp_config_dir(tmp_path):
     """Temporary directory for config files, patching PMO_CONFIG_DIR."""
     config_dir = tmp_path / "pmo-config"

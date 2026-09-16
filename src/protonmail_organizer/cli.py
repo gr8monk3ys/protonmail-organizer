@@ -199,12 +199,13 @@ def cleanup():
 @click.option("--folder", default=INBOX, help="Folder to clean (default: Inbox).")
 @click.option("--dry-run", is_flag=True, help="Preview without deleting.")
 @click.option("--permanent", is_flag=True, help="Permanently delete instead of moving to Trash.")
-def old(days, folder, dry_run, permanent):
+@click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt.")
+def old(days, folder, dry_run, permanent, yes):
     """Move messages older than N days to Trash (or --permanent)."""
     client = get_authenticated_client()
     from .cleanup import delete_old_messages
 
-    delete_old_messages(client, days, folder, dry_run, permanent)
+    delete_old_messages(client, days, folder, dry_run, permanent, assume_yes=yes)
 
 
 @cleanup.command()
@@ -222,12 +223,13 @@ def sender(pattern, dry_run):
 @click.option("--dry-run", is_flag=True, help="Preview without acting.")
 @click.option("--delete", "do_delete", is_flag=True, help="Remove instead of just listing.")
 @click.option("--permanent", is_flag=True, help="Permanently delete instead of moving to Trash.")
-def newsletters(dry_run, do_delete, permanent):
+@click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt.")
+def newsletters(dry_run, do_delete, permanent, yes):
     """Detect and optionally remove newsletter messages (to Trash by default)."""
     client = get_authenticated_client()
     from .cleanup import handle_newsletters
 
-    handle_newsletters(client, dry_run, do_delete, permanent)
+    handle_newsletters(client, dry_run, do_delete, permanent, assume_yes=yes)
 
 
 @cleanup.command(name="empty-trash")
@@ -387,21 +389,13 @@ def preview(rules_file):
 @click.argument("filter_id")
 @click.option("--file", "rules_file", default=None, help="Path to rules YAML.")
 @click.option("--name", default=None, help="New filter name.")
-def update(filter_id, rules_file, name):
+@click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt.")
+def update(filter_id, rules_file, name, yes):
     """Update an existing server-side filter with recompiled rules."""
     client = get_authenticated_client()
-    from .display import print_error as _print_error
-    from .display import print_success as _print_success
-    from .filters import _compile_from_file
+    from .filters import update_filter_from_rules
 
-    sieve = _compile_from_file(rules_file, client=client)
-    if not sieve:
-        return
-    try:
-        client.update_filter(filter_id, sieve, name=name)
-        _print_success(f"Updated filter {filter_id}")
-    except Exception as e:
-        _print_error(f"Failed to update filter: {e}")
+    update_filter_from_rules(client, filter_id, rules_file, name, assume_yes=yes)
 
 
 # ── Respond (AI Draft Replies) ───────────────────────────────────────────────
@@ -532,8 +526,9 @@ def use(template_name, message_id):
 
 @cli.command()
 @click.option("--list", "show_list", is_flag=True, help="Show the operation history instead.")
-def undo(show_list):
-    """Reverse the most recent bulk cleanup operation (archive / move-to-Trash)."""
+@click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt.")
+def undo(show_list, yes):
+    """Reverse the most recent bulk operation (cleanup or rule archive / move / trash)."""
     if show_list:
         from .oplog import list_operations
 
@@ -542,7 +537,7 @@ def undo(show_list):
     client = get_authenticated_client()
     from .oplog import undo_last
 
-    undo_last(client)
+    undo_last(client, assume_yes=yes)
 
 
 # ── Watch Mode ───────────────────────────────────────────────────────────────

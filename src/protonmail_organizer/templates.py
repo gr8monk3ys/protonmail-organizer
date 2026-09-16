@@ -22,7 +22,7 @@ from rich.table import Table
 
 from .client_ext import ProtonMailExt
 from .config import CONFIG_DIR, ensure_config_dir
-from .display import console, print_error, print_info, print_success, print_warning
+from .display import console, print_error, print_info, print_success, print_warning, truncate
 
 TEMPLATES_FILE = CONFIG_DIR / "templates.json"
 
@@ -75,13 +75,6 @@ def _validate_name(name: str) -> Optional[str]:
             "only alphanumeric characters and hyphens."
         )
     return None
-
-
-def _truncate(text: str, max_len: int) -> str:
-    """Truncate text with ellipsis."""
-    if len(text) <= max_len:
-        return text
-    return text[:max_len] + "..."
 
 
 # --- Editor ---
@@ -151,7 +144,7 @@ def list_templates() -> None:
     for tpl in templates.values():
         name = tpl.get("name", "?")
         body = tpl.get("body", "")
-        preview = _truncate(body.replace("\n", " "), 60)
+        preview = truncate(body.replace("\n", " "), 60)
         use_count = str(tpl.get("use_count", 0))
         last_used = tpl.get("last_used")
         if last_used:
